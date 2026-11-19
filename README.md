@@ -39,6 +39,12 @@ Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 或 **�
    - 問要不要允許變更 → 按「是」（要設定防火牆）
 3. 右下角出現 Padbridge 圖示就裝好了，之後每次登入會自己啟動
 
+手機 App 也找得到下載入口：「選電腦」→「電腦還沒裝 Padbridge？」，會顯示上面的 Releases 網址。網址不好打的話，可以讓電腦瀏覽器連到手機的區網 IP，網頁上自己選：
+- **快速直接下載**：從手機拿同一個安裝包（不含任何配對碼）。走一般 HTTP，同網路的人有機會把檔案換掉，只在自己信任的網路用。
+- **高安全性下載**：轉到 GitHub 發布頁，經 HTTPS 下載；請確認網址列是 `github.com/luna61ouo/padbridge`。
+
+兩邊是同一個檔案，手機畫面會顯示 SHA-256，可以跟 `certutil -hashfile <檔名> SHA256` 對照。
+
 **配對**：電腦圖示按右鍵 →「加一支手機（掃 QR）」→ 手機 App 切到 Wi-Fi →「選電腦」→「掃 QR 加電腦」。
 
 ### 藍牙模式與「小幫手」（進階，選用）
@@ -113,6 +119,12 @@ The mouse is just the first piece. Padbridge aims to be an **input relay**: the 
    - "Windows protected your PC" → "More info" → "Run anyway" (the installer is not code-signed)
    - Allow the admin prompt (needed for the firewall rule)
 3. The Padbridge tray icon appears; it starts automatically at every logon
+
+The app can point you there too: "選電腦" (choose PC) → "電腦還沒裝 Padbridge？" (PC doesn't have Padbridge yet?) shows the Releases URL. If typing it is a pain, the PC's browser can open the phone's LAN address and choose:
+- **Quick download**: the same setup zip served by the phone (it contains no pairing secret). Plain HTTP, so someone on the same network could swap the file — only use it on a network you trust.
+- **High-security download**: redirects to the GitHub release page over HTTPS; check the address bar shows `github.com/luna61ouo/padbridge`.
+
+Both are the same file; the phone shows its SHA-256 so you can compare with `certutil -hashfile <file> SHA256`.
 
 **Pairing**: right-click the tray icon → "加一支手機（掃 QR）" (add a phone via QR) → in the app switch to Wi-Fi → "選電腦" (choose PC) → "掃 QR 加電腦" (scan QR).
 

@@ -26,10 +26,16 @@ if [ ! -f "$KEYSTORE" ]; then
         -storepass "$KS_PASS" -keypass "$KS_PASS" -dname "CN=Padbridge Debug" >/dev/null
 fi
 
-rm -rf build && mkdir -p build/gen build/classes
+rm -rf build && mkdir -p build/gen build/classes build/assets/PadbridgeSetup
+# Windows 通用安裝包（不含任何配對碼）：打進 APK 讓手機能在區網提供下載；release.sh 也直接拿這一個上傳，
+# 所以 GitHub 上的跟手機給的是同一個檔（SHA-256 一樣）。時間戳固定，重建內容不變時位元組也不變。
+cp windows/PadbridgeSetup.cmd windows/install.ps1 windows/PadbridgeReceiver.ps1 windows/PadbridgeBleKick.ps1 \
+   windows/PadbridgeBlePair.ps1 windows/PadbridgeQr.cs LICENSE NOTICE build/assets/PadbridgeSetup/
+touch -d '2026-01-01 00:00:00 UTC' build/assets/PadbridgeSetup build/assets/PadbridgeSetup/*
+( cd build/assets && find PadbridgeSetup | LC_ALL=C sort | zip -qX -@ PadbridgeSetup-windows.zip && rm -rf PadbridgeSetup )
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link --manifest AndroidManifest.xml --min-sdk-version 29 --target-sdk-version 35 \
-    --auto-add-overlay -I "$ANDROID_JAR" -R build/res.zip --java build/gen -o build/app-no-dex.apk
+    --auto-add-overlay -I "$ANDROID_JAR" -R build/res.zip -A build/assets --java build/gen -o build/app-no-dex.apk
 find src build/gen -name '*.java' | sort > build/srclist.txt
 # 第三方：libs/*.jar（ZXing core 3.5.3，Apache-2.0，掃配對 QR 用；Maven Central 下載、sha1 驗過）
 LIBS=$(ls libs/*.jar 2>/dev/null | tr '\n' ':')

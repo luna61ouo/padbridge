@@ -263,6 +263,10 @@ public class MainActivity extends Activity {
         hint.setText("找電腦中…");
         final LinearLayout listBox = new LinearLayout(this);
         listBox.setOrientation(LinearLayout.VERTICAL);
+        final Button noApp = new Button(this);
+        noApp.setAllCaps(false);
+        noApp.setText("電腦還沒裝 Padbridge？");
+        box.addView(noApp);
         box.addView(hint);
         box.addView(listBox);
         final AlertDialog d = new AlertDialog.Builder(this)
@@ -272,6 +276,7 @@ public class MainActivity extends Activity {
                 .setNeutralButton("手動輸入", (x, w) -> wifiDialog())
                 .setNegativeButton("關閉", null)
                 .create();
+        noApp.setOnClickListener(v -> { d.dismiss(); setupDialog(); });
         final boolean[] open = {true};
         d.setOnDismissListener(x -> open[0] = false);
         final Runnable[] render = new Runnable[1];
@@ -279,7 +284,7 @@ public class MainActivity extends Activity {
             listBox.removeAllViews();
             List<PcList.Pc> l = hub.pcs().sorted();
             PcList.Pc sel = hub.pcs().selected();
-            hint.setText(l.isEmpty() ? "還沒有電腦。按「加一台電腦」，照手機上的網址在電腦瀏覽器打開。" : "點一下切換；長按可改名或刪除");
+            hint.setText(l.isEmpty() ? "還沒有電腦。電腦裝好 Padbridge 後，在右下角圖示右鍵選「加一支手機（掃 QR）」，再按下面的「掃 QR 加電腦」。" : "點一下切換；長按可改名或刪除");
             for (PcList.Pc pc : l) {
                 Button b = new Button(this);
                 boolean isSel = sel != null && sel.id.equals(pc.id);
@@ -304,6 +309,70 @@ public class MainActivity extends Activity {
                 try { Thread.sleep(2500); } catch (InterruptedException e) { return; }
             }
         }, "pc-discover").start();
+    }
+
+    // ---------- 電腦還沒裝 Padbridge ----------
+    // 主路：GitHub Releases（瀏覽器本來就信任的 HTTPS）。備用：手機在區網開小網站，讓使用者自己選快速或高安全性。
+    private void setupDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(8), dp(20), 0);
+        TextView t = new TextView(this);
+        t.setTextSize(15);
+        t.setText("在電腦的瀏覽器打開這個網址，下載 PadbridgeSetup-windows zip：");
+        TextView url = new TextView(this);
+        url.setTextSize(16);
+        url.setTextColor(0xFFBFA8FF);
+        url.setTextIsSelectable(true);
+        url.setText(SetupServer.RELEASES_URL);
+        url.setPadding(0, dp(6), 0, dp(6));
+        TextView after = new TextView(this);
+        after.setTextColor(0xFF9A8FB0);
+        after.setTextSize(13);
+        after.setText("解壓後雙擊 PadbridgeSetup.cmd。裝好後在電腦右下角的 Padbridge 圖示按右鍵 →「加一支手機（掃 QR）」，回來按「掃 QR 加電腦」。\n\n"
+                + "網址太長不好打？可以讓電腦直接連到這支手機（要在同一個 Wi-Fi）。");
+        box.addView(t); box.addView(url); box.addView(after);
+        new AlertDialog.Builder(this).setTitle("電腦還沒裝 Padbridge？").setView(box)
+                .setPositiveButton("複製網址", (x, w) -> {
+                    android.content.ClipboardManager cm = getSystemService(android.content.ClipboardManager.class);
+                    if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("Padbridge", SetupServer.RELEASES_URL));
+                })
+                .setNeutralButton("讓電腦連到手機", (x, w) -> lanSetupDialog())
+                .setNegativeButton("關閉", null).show();
+    }
+
+    private void lanSetupDialog() {
+        if (PcList.wifiAddress() == null) {
+            new AlertDialog.Builder(this).setMessage("手機現在沒連 Wi-Fi。請讓手機跟電腦連到同一個 Wi-Fi 再試。").setPositiveButton("好", null).show();
+            return;
+        }
+        final boolean openWifi = PcList.unsafeWifiReason(this) != null;
+        final TextView tv = new TextView(this);
+        tv.setTextSize(15);
+        tv.setPadding(dp(20), dp(8), dp(20), 0);
+        tv.setTextIsSelectable(true);
+        final String[] last = {"等電腦連過來…"};
+        final SetupServer[] srv = new SetupServer[1];
+        srv[0] = new SetupServer(this, openWifi, (text, done) -> ui.post(() -> { last[0] = text; showLan(tv, srv[0], openWifi, last[0]); }));
+        srv[0].start();
+        showLan(tv, srv[0], openWifi, last[0]);
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+        AlertDialog d = new AlertDialog.Builder(this).setTitle("讓電腦從這支手機下載").setView(sv)
+                .setPositiveButton("關閉", null).create();
+        d.setOnDismissListener(x -> srv[0].stop());
+        d.show();
+    }
+
+    private void showLan(TextView tv, SetupServer s, boolean openWifi, String ev) {
+        String u = s.url();
+        tv.setText("在電腦的瀏覽器網址列輸入：\n\n    " + (u == null ? "（手機沒連 Wi-Fi）" : u) + "\n\n"
+                + "網頁上有兩種下載方式，請電腦那邊自己選：\n"
+                + "⚡ 快速直接下載：從手機拿安裝包。只在自己信任的網路（家裡、公司）用。\n"
+                + "🔒 高安全性下載：轉到 GitHub 官方頁面下載，檔案不會被半路換掉。\n\n"
+                + (openWifi ? "⚠️ 現在是開放的公共 Wi-Fi，建議選高安全性下載。\n\n" : "")
+                + "安裝包的 SHA-256（可以跟電腦上 certutil 算出來的對照）：\n" + s.sha256() + "\n\n"
+                + "狀態：" + ev + "\n（關掉這個視窗，小網站就會關閉；最多開 10 分鐘）");
     }
 
     private void pcMenu(PcList.Pc pc, Runnable after) {
