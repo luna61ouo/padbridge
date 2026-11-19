@@ -1,0 +1,10 @@
+Padbridge
+Copyright 2026 luna61ouo
+
+This product includes software developed at:
+- ZXing ("Zebra Crossing") — https://github.com/zxing/zxing
+  Copyright ZXing authors. Licensed under the Apache License, Version 2.0.
+  Used for scanning pairing QR codes in the Android app (libs/zxing-core-3.5.3.jar).
+
+The QR encoder in windows/PadbridgeQr.cs follows the structure of
+"QR Code generator library" by Project Nayuki (MIT License, https://www.nayuki.io/page/qr-code-generator-library).
