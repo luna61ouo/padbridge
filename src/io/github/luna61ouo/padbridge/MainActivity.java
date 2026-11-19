@@ -82,16 +82,17 @@ public class MainActivity extends Activity {
         btnRow.addView(holdBtn("右鍵", MouseHub.BTN_RIGHT), weight());
         root.addView(btnRow, new LinearLayout.LayoutParams(-1, dp(72)));
 
-        TextView sl = new TextView(this);
+        final TextView sl = new TextView(this);
         sl.setTextColor(0xFF9A8FB0);
-        sl.setText("速度");
         sl.setPadding(0, dp(8), 0, 0);
         root.addView(sl);
+        // 速度：前段 0.1～1.5 每格 0.1（日常細調），後段 1.5～5.0 每格 0.25（高速，例如玩 osu! 要小幅手指掃過整個螢幕）
         SeekBar sb = new SeekBar(this);
-        sb.setMax(14);
-        sb.setProgress(Math.round(hub.sensitivity() * 10) - 1);
+        sb.setMax(SPEED_STEPS);
+        sb.setProgress(speedToStep(hub.sensitivity()));
+        sl.setText(speedLabel(hub.sensitivity()));
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar s, int v, boolean f) { hub.setSensitivity((v + 1) / 10f); }
+            @Override public void onProgressChanged(SeekBar s, int v, boolean f) { float g = stepToSpeed(v); hub.setSensitivity(g); sl.setText(speedLabel(g)); }
             @Override public void onStartTrackingTouch(SeekBar s) {}
             @Override public void onStopTrackingTouch(SeekBar s) {}
         });
@@ -101,6 +102,14 @@ public class MainActivity extends Activity {
         askPermissions();
         handlePairLink(getIntent());
     }
+
+    static final int SPEED_STEPS = 28;
+    static float stepToSpeed(int v) { return v <= 14 ? (v + 1) / 10f : 1.5f + (v - 14) * 0.25f; }
+    static int speedToStep(float g) {
+        int v = g <= 1.5f ? Math.round(g * 10) - 1 : 14 + Math.round((g - 1.5f) / 0.25f);
+        return Math.max(0, Math.min(SPEED_STEPS, v));
+    }
+    static String speedLabel(float g) { return String.format(java.util.Locale.ROOT, "速度 ×%.2f", g).replaceAll("0$", ""); }
 
     @Override protected void onNewIntent(Intent i) { super.onNewIntent(i); setIntent(i); handlePairLink(i); }
 
