@@ -11,22 +11,18 @@
 ### 這是什麼
 
 臨時要用滑鼠卻沒帶？要從沙發遠端操作電腦？好幾個人想輪流控制同一台電腦？
-Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 或 **藍牙（BLE）** 控制電腦游標。
+Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 控制電腦游標。
 
 滑鼠只是第一步。Padbridge 的目標是當「輸入中繼站」：手機接住藍牙搖桿、鍵盤、滑鼠、手錶手勢，再透過 Wi-Fi 轉給沒有藍牙、或不方便配對的電腦。
 
 ### 現在能做什麼
 
-| | Wi-Fi 模式 | 藍牙（BLE）模式 |
-|---|---|---|
-| 電腦要裝東西嗎 | 要（Windows 小程式，右下角圖示） | 不用，電腦把手機當成藍牙滑鼠 |
-| 一支手機控多台電腦 | 可以，App 裡切換 | 一次一台（電腦圖示可一鍵改連） |
-| 多支手機控同一台電腦 | 可以，每支手機各自配對 | 可以 |
-| 適合 | 電腦沒藍牙、要跟眼鏡／耳機等藍牙裝置並存 | 任何支援藍牙滑鼠的裝置（電腦、平板、VR） |
-
+- 電腦只要裝一個 Windows 小程式（右下角圖示）；手機不需要任何特殊權限
+- 一支手機可以控多台電腦（App 裡切換），多支手機也可以控同一台電腦（各自配對）
+- 跟眼鏡、耳機、手錶等藍牙裝置並存，不搶藍牙
 - 觸控板：單指移動、點一下左鍵、雙指點右鍵、雙指上下捲動、按住再滑拖曳
 - 配對：電腦圖示顯示 QR，手機 App 掃一下就好
-- 電腦端圖示：顯示連入的手機（名稱可自訂）、目前用 Wi-Fi 還是藍牙，可暫停、可撤銷某支手機
+- 電腦端圖示：顯示連入的手機（名稱可自訂）與使用狀態，可暫停、可撤銷某支手機
 
 ### 安裝
 
@@ -46,18 +42,6 @@ Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 或 **�
 兩邊是同一個檔案，手機畫面會顯示 SHA-256，可以跟 `certutil -hashfile <檔名> SHA256` 對照。
 
 **配對**：電腦圖示按右鍵 →「加一支手機（掃 QR）」→ 手機 App 切到 Wi-Fi →「選電腦」→「掃 QR 加電腦」。
-
-### 藍牙模式與「小幫手」（進階，選用）
-
-不裝小幫手也能用藍牙，但 Android App 只能用「會定期變換的隨機位址」，Windows 有時會連不回來。
-小幫手用 adb 的身分在手機上跑，能用手機的固定位址、App 被關掉也不斷線，手機藍牙關開後也能由電腦端程式自動接回。
-
-```bash
-# 手機開啟「開發人員選項 → 無線偵錯」或接 USB，然後：
-adb push daemon/start-daemon.sh /data/local/tmp/padbridge-start.sh
-adb shell sh /data/local/tmp/padbridge-start.sh
-```
-再到 App 的「設定」打開「藍牙：固定位址（小幫手）」。手機重開機後要再跑一次。
 
 ### 安全設計
 
@@ -79,7 +63,8 @@ adb shell sh /data/local/tmp/padbridge-start.sh
 ### 目前限制
 
 - 電腦端目前只支援 Windows；App 介面目前是中文
-- 鍵盤、搖桿、手勢轉送還在規劃中
+- 規劃中：繪圖板模式（絕對座標，配觸控筆就能當繪圖板）、鍵盤／搖桿／手勢轉送
+- 0.9.0 的藍牙（BLE）模式已移除：要穩定得靠一個用 adb 權限跑的小幫手，對一般使用者來說要開的權限太大
 
 ### 授權
 
@@ -92,22 +77,18 @@ Apache License 2.0，見 [LICENSE](LICENSE)。使用的第三方元件見 [NOTIC
 ### What is it
 
 Need a mouse but didn't bring one? Want to control your PC from the couch? Several people taking turns on one computer?
-Padbridge turns an Android phone into a touchpad for your computer, over **Wi-Fi** or **Bluetooth LE**.
+Padbridge turns an Android phone into a touchpad for your computer, over **Wi-Fi**.
 
 The mouse is just the first piece. Padbridge aims to be an **input relay**: the phone receives Bluetooth gamepads, keyboards, mice and watch gestures, and forwards them over Wi-Fi to computers that have no Bluetooth or are inconvenient to pair.
 
 ### What works today
 
-| | Wi-Fi mode | Bluetooth LE mode |
-|---|---|---|
-| Install on the PC? | Yes (small Windows receiver with a tray icon) | No — the PC sees the phone as a Bluetooth mouse |
-| One phone, several PCs | Yes, switch in the app | One at a time (tray icon can take it over in one click) |
-| Several phones, one PC | Yes, each phone is paired separately | Yes |
-| Best for | PCs without Bluetooth; coexisting with glasses/headsets | Anything that accepts a Bluetooth mouse (PC, tablet, VR) |
-
+- Install one small Windows receiver (tray icon) on the PC; the phone needs no special permissions
+- One phone can drive several PCs (switch in the app), and several phones can share one PC (each paired separately)
+- Coexists with Bluetooth glasses, headsets and watches — it doesn't use Bluetooth at all
 - Touchpad: one-finger move, tap = left click, two-finger tap = right click, two-finger scroll, press-and-hold then move to drag
 - Pairing: the PC tray icon shows a QR code; scan it in the app
-- Tray icon: lists connected phones (custom names), shows Wi-Fi/Bluetooth status, pause, revoke a phone
+- Tray icon: lists connected phones (custom names) and their status, pause, revoke a phone
 
 ### Install
 
@@ -127,18 +108,6 @@ The app can point you there too: "選電腦" (choose PC) → "電腦還沒裝 Pa
 Both are the same file; the phone shows its SHA-256 so you can compare with `certutil -hashfile <file> SHA256`.
 
 **Pairing**: right-click the tray icon → "加一支手機（掃 QR）" (add a phone via QR) → in the app switch to Wi-Fi → "選電腦" (choose PC) → "掃 QR 加電腦" (scan QR).
-
-### Bluetooth mode and the helper (advanced, optional)
-
-Bluetooth works without the helper, but a normal Android app can only advertise with a rotating random address, so Windows sometimes fails to reconnect.
-The helper runs on the phone with adb shell privileges: it uses the phone's fixed public address, keeps the mouse alive when the app is killed, and lets the PC receiver reconnect after the phone's Bluetooth is toggled.
-
-```bash
-# enable Developer options → Wireless debugging (or USB), then:
-adb push daemon/start-daemon.sh /data/local/tmp/padbridge-start.sh
-adb shell sh /data/local/tmp/padbridge-start.sh
-```
-Then enable "藍牙：固定位址（小幫手）" (Bluetooth: fixed address / helper) in the app settings. Re-run after the phone reboots.
 
 ### Security
 
@@ -160,7 +129,8 @@ Requires the Android SDK (platform 35, build-tools 35.0.0) and JDK 11+. No Gradl
 ### Limitations
 
 - PC side is Windows-only for now; the app UI is in Chinese for now
-- Keyboard, gamepad and gesture relaying are planned
+- Planned: drawing-tablet mode (absolute positioning — add a stylus and it works as a pen tablet), keyboard / gamepad / gesture relaying
+- The Bluetooth LE mode from 0.9.0 has been removed: making it reliable required a helper running with adb privileges, which is too much access to ask of normal users
 
 ### License
 

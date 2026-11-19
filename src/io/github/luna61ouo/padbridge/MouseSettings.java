@@ -8,9 +8,7 @@ import android.content.SharedPreferences;
  * 新增設定：在 ALL 加一筆 Toggle，程式裡用 on(KEY) 讀。只給除錯用的旗標不放這裡（MouseHub.setFlag）。
  */
 public final class MouseSettings {
-    public static final String ANNOUNCE_IN_USE = "announceInUse";
     public static final String WIFI_LOW_LATENCY = "wifiLowLatency";
-    public static final String FIXED_ADDRESS = "daemon";   // 沿用舊 key（固定位址＝小幫手模式）
 
     public static final class Toggle {
         public final String key, title, help; public final boolean def;
@@ -20,12 +18,6 @@ public final class MouseSettings {
     public static final Toggle[] ALL = {
         new Toggle(WIFI_LOW_LATENCY, "Wi-Fi 低延遲",
                 "用觸控板時讓手機的 Wi-Fi 不進省電，游標比較不會一頓一頓。停手 5 秒恢復省電。", true),
-        new Toggle(ANNOUNCE_IN_USE, "通知其他 App「滑鼠使用中」",
-                "使用中對外廣播 io.github.luna61ouo.padbridge.action.IN_USE（附 transport＝ble／wifi、sec）。"
-                        + "其他 App 可以收聽來暫時讓出藍牙（例如智慧眼鏡），要不要讓由它們決定。沒有 App 收聽就沒有作用。", true),
-        new Toggle(FIXED_ADDRESS, "藍牙：固定位址（小幫手）",
-                "藍牙滑鼠改由手機上的小幫手負責：用手機真實位址、App 被關掉也不斷線，電腦比較能自己連回來。"
-                        + "小幫手要用無線偵錯（adb）啟動一次，沒啟動時打開這個會連不上。", false),
     };
 
     private final SharedPreferences p;

@@ -25,7 +25,7 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Wi-Fi 模式的電腦清單：一支手機可以換著控制好幾台電腦。
  * 每台電腦各自一組 pcId＋配對碼，存在 prefs（JSON）。
- * 找電腦：UDP 廣播 `LMD|<nonce>` 到 47801，電腦回 `LMH|pcId|主機名|自訂名稱|藍牙位址|hmac`，
+ * 找電腦：UDP 廣播 `LMD|<nonce>` 到 47801，電腦回 `LMH|pcId|主機名|自訂名稱|（保留欄）|hmac`，
  * hmac＝HMAC-SHA256(配對碼, nonce|pcId) 前 16 字——區網上別人冒充不了某台電腦（冒充的話滑鼠訊號跟配對碼會被騙走）。
  * 名稱以電腦端 name.txt 為準：手機改名送 `n`，電腦端圖示改名下次被找到時同步回來。
  */
@@ -33,7 +33,7 @@ public final class PcList {
     static final String TAG = "Padbridge";
 
     public static final class Pc {
-        public String id, token, name = "", hostname = "", ip = "", bt = "";
+        public String id, token, name = "", hostname = "", ip = "";
         public int port = 47801;
         public long lastSeen;
         public transient boolean online;
@@ -43,12 +43,12 @@ public final class PcList {
         }
         JSONObject json() throws Exception {
             return new JSONObject().put("id", id).put("token", token).put("name", name).put("hostname", hostname)
-                    .put("ip", ip).put("bt", bt).put("port", port).put("lastSeen", lastSeen);
+                    .put("ip", ip).put("port", port).put("lastSeen", lastSeen);
         }
         static Pc from(JSONObject o) {
             Pc p = new Pc();
             p.id = o.optString("id"); p.token = o.optString("token"); p.name = o.optString("name");
-            p.hostname = o.optString("hostname"); p.ip = o.optString("ip"); p.bt = o.optString("bt");
+            p.hostname = o.optString("hostname"); p.ip = o.optString("ip");
             p.port = o.optInt("port", 47801); p.lastSeen = o.optLong("lastSeen");
             return p;
         }
@@ -134,7 +134,7 @@ public final class PcList {
     }
 
     /**
-     * 找一次電腦（會卡住約 0.8 秒，別在主執行緒叫）。回來的會更新 IP、名稱、藍牙位址、online；
+     * 找一次電腦（會卡住約 0.8 秒，別在主執行緒叫）。回來的會更新 IP、名稱、online；
      * 認得但沒回的標成 offline。新裝好的電腦（pending）在這裡第一次被認出來。
      */
     public void discover() {
@@ -171,7 +171,7 @@ public final class PcList {
                         p.id = f[1];
                         if (wasSel) select(p.id);
                     }
-                    p.ip = ip; p.hostname = f[2]; p.name = f[3]; p.bt = f[4];
+                    p.ip = ip; p.hostname = f[2]; p.name = f[3];   // f[4] 是舊版的藍牙位址欄，留著位置相容、不用
                     p.lastSeen = System.currentTimeMillis();
                     found.add(p.id);
                 }

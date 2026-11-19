@@ -29,8 +29,8 @@ fi
 rm -rf build && mkdir -p build/gen build/classes build/assets/PadbridgeSetup
 # Windows 通用安裝包（不含任何配對碼）：打進 APK 讓手機能在區網提供下載；release.sh 也直接拿這一個上傳，
 # 所以 GitHub 上的跟手機給的是同一個檔（SHA-256 一樣）。時間戳固定，重建內容不變時位元組也不變。
-cp windows/PadbridgeSetup.cmd windows/install.ps1 windows/PadbridgeReceiver.ps1 windows/PadbridgeBleKick.ps1 \
-   windows/PadbridgeBlePair.ps1 windows/PadbridgeQr.cs LICENSE NOTICE build/assets/PadbridgeSetup/
+cp windows/PadbridgeSetup.cmd windows/install.ps1 windows/PadbridgeReceiver.ps1 windows/PadbridgeQr.cs \
+   LICENSE NOTICE build/assets/PadbridgeSetup/
 touch -d '2026-01-01 00:00:00 UTC' build/assets/PadbridgeSetup build/assets/PadbridgeSetup/*
 ( cd build/assets && find PadbridgeSetup | LC_ALL=C sort | zip -qX -@ PadbridgeSetup-windows.zip && rm -rf PadbridgeSetup )
 "$BT/aapt2" compile --dir res -o build/res.zip

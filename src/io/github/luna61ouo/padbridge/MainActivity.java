@@ -2,12 +2,8 @@ package io.github.luna61ouo.padbridge;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -34,7 +30,7 @@ import java.util.Set;
 public class MainActivity extends Activity {
     private MouseHub hub;
     private TextView status;
-    private Button bleMode, wifiMode, actA, actB;
+    private Button actA, actB;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     @Override protected void onCreate(Bundle b) {
@@ -59,17 +55,12 @@ public class MainActivity extends Activity {
         status.setPadding(0, 0, 0, dp(8));
         root.addView(status);
 
-        LinearLayout modeRow = row();
-        bleMode = btn("藍牙", v -> switchMode(MouseHub.MODE_BLE));
-        wifiMode = btn("Wi-Fi", v -> switchMode(MouseHub.MODE_WIFI));
+        LinearLayout topRow = row();
+        actA = btn("", v -> pcDialog());
         actB = btn("⚙ 設定", v -> settingsDialog());
-        modeRow.addView(bleMode, weight());
-        modeRow.addView(wifiMode, weight());
-        modeRow.addView(actB, weightSmall());
-        root.addView(modeRow);
-
-        actA = btn("", v -> onActionA());
-        root.addView(actA, new LinearLayout.LayoutParams(-1, -2));
+        topRow.addView(actA, new LinearLayout.LayoutParams(0, -2, 2f));
+        topRow.addView(actB, new LinearLayout.LayoutParams(0, -2, 0.8f));
+        root.addView(topRow);
 
         Touchpad pad = new Touchpad(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 0, 1f);
@@ -99,7 +90,6 @@ public class MainActivity extends Activity {
         root.addView(sb);
 
         setContentView(root);
-        askPermissions();
         handlePairLink(getIntent());
     }
 
@@ -131,14 +121,13 @@ public class MainActivity extends Activity {
         int port = 47801; try { port = Integer.parseInt(q.get("port")); } catch (Exception ignored) {}
         final PcList.Pc p = hub.pcs().addFromQr(pc, ip, port, t, q.get("n"));
         setIntent(new Intent());   // 轉向／回前景時別再處理一次
-        hub.setMode(MouseHub.MODE_WIFI); hub.stopBle();
         hub.selectPc(p.id);
         refresh(hub.statusText());
         final AlertDialog d = new AlertDialog.Builder(this).setTitle("加電腦").setMessage("正在連「" + p.label() + "」…").setPositiveButton("好", null).show();
         new Thread(() -> {
             hub.pcs().discover();
             boolean ok = p.online;
-            ui.post(() -> { d.setMessage(ok ? "✓ 加好了：" + p.label() + "\n已經切到這台，可以用 Wi-Fi 滑鼠了。" : "已加入「" + p.label() + "」，但現在找不到它：手機跟電腦要在同一個 Wi-Fi。"); refresh(hub.statusText()); });
+            ui.post(() -> { d.setMessage(ok ? "✓ 加好了：" + p.label() + "\n已經切到這台，可以用了。" : "已加入「" + p.label() + "」，但現在找不到它：手機跟電腦要在同一個 Wi-Fi。"); refresh(hub.statusText()); });
             hub.tellPcMode();
         }).start();
     }
@@ -176,46 +165,12 @@ public class MainActivity extends Activity {
         super.onPause();
     }
 
-    private void askPermissions() {
-        List<String> need = new ArrayList<>();
-        for (String s : new String[]{"android.permission.BLUETOOTH_CONNECT",
-                "android.permission.BLUETOOTH_ADVERTISE", "android.permission.POST_NOTIFICATIONS"}) {
-            if (checkSelfPermission(s) != PackageManager.PERMISSION_GRANTED) need.add(s);
-        }
-        if (need.isEmpty()) startMouseService();
-        else requestPermissions(need.toArray(new String[0]), 1);
-    }
-
-    @Override public void onRequestPermissionsResult(int rc, String[] perms, int[] res) {
-        startMouseService();
-    }
-
-    private void startMouseService() {
-        if (checkSelfPermission("android.permission.BLUETOOTH_CONNECT") != PackageManager.PERMISSION_GRANTED) {
-            refresh("藍牙權限沒開：設定 → 應用程式 → Padbridge → 權限 → 附近的裝置");
-            return;
-        }
-        startForegroundService(new Intent(this, MouseService.class));
-    }
-
-    private void switchMode(int m) {
-        hub.setMode(m);
-        if (m != MouseHub.MODE_BLE) hub.stopBle();
-        if (m == MouseHub.MODE_BLE) hub.startBle();
-        refresh(hub.statusText());
-    }
-
     private void refresh(String text) {
         status.setText(text);
-        int m = hub.mode();
-        bleMode.setAlpha(m == MouseHub.MODE_BLE ? 1f : 0.45f);
-        wifiMode.setAlpha(m == MouseHub.MODE_WIFI ? 1f : 0.45f);
         PcList.Pc sel = hub.pcs().selected();
-        actA.setVisibility(m == MouseHub.MODE_WIFI ? View.VISIBLE : View.GONE);
         actA.setText("選電腦：" + (sel == null ? "（還沒選）" : sel.label()) + "  ▾");
     }
 
-    private void onActionA() { pcDialog(); }
 
     // ---------- 設定（照 MouseSettings.ALL 自動長出來）----------
     private void settingsDialog() {
@@ -238,7 +193,6 @@ public class MainActivity extends Activity {
             sw.setChecked(st.on(t.key));
             sw.setOnCheckedChangeListener((b, on) -> {
                 st.set(t.key, on);
-                if (MouseSettings.FIXED_ADDRESS.equals(t.key) && hub.mode() == MouseHub.MODE_BLE) { hub.stopBle(); hub.startBle(); }
                 refresh(hub.statusText());
             });
             TextView help = new TextView(this);
@@ -279,7 +233,7 @@ public class MainActivity extends Activity {
         box.addView(hint);
         box.addView(listBox);
         final AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle("Wi-Fi：用哪台電腦")
+                .setTitle("用哪台電腦")
                 .setView(box)
                 .setPositiveButton("掃 QR 加電腦", (x, w) -> startActivity(new Intent(this, ScanActivity.class)))
                 .setNeutralButton("手動輸入", (x, w) -> wifiDialog())

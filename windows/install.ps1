@@ -1,4 +1,4 @@
-﻿# Padbridge 電腦端安裝（Wi-Fi 接收＋藍牙最後一哩＋右下角小圖示）。重跑＝更新。
+﻿# Padbridge 電腦端安裝（Wi-Fi 接收程式＋右下角小圖示）。重跑＝更新。
 # 裝好之後在右下角小圖示選「加一支手機（掃 QR）」，用手機 App 掃就配好了。
 # 做三件事：
 #   1. 防火牆只開 UDP 47801，而且只收同一個區網來的封包
@@ -33,10 +33,16 @@ if ($Uninstall) {
 }
 
 
-if (-not (Test-Path (Join-Path $dir 'PadbridgeReceiver.ps1')) -or -not (Test-Path (Join-Path $dir 'PadbridgeBleKick.ps1')) -or -not (Test-Path (Join-Path $dir 'PadbridgeBlePair.ps1')) -or -not (Test-Path (Join-Path $dir 'PadbridgeQr.cs'))) {
+if (-not (Test-Path (Join-Path $dir 'PadbridgeReceiver.ps1')) -or -not (Test-Path (Join-Path $dir 'PadbridgeQr.cs'))) {
     Write-Host "找不到 $dir 裡的程式檔，請重新下載安裝包。" -ForegroundColor Red
     Read-Host '按 Enter 關閉'; exit 1
 }
+
+# 0.10.0 起沒有藍牙模式：清掉舊版留下的藍牙相關檔案（不動電腦的藍牙設定）
+foreach ($old in 'PadbridgeBleKick.ps1', 'PadbridgeBlePair.ps1', 'blepair.exe', 'blepair.cs', 'ble-phone.txt', 'phone-bt.txt', 'pair-result.txt') {
+    Remove-Item -LiteralPath (Join-Path $dir $old) -Force -ErrorAction SilentlyContinue
+}
+Get-ChildItem $dir -Filter 'phone-*.bt' -ErrorAction SilentlyContinue | Remove-Item -Force
 
 Get-NetFirewallRule -DisplayName $rule -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 New-NetFirewallRule -DisplayName $rule -Direction Inbound -Protocol UDP -LocalPort 47801 `
