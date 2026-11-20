@@ -25,7 +25,7 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Wi-Fi 模式的電腦清單：一支手機可以換著控制好幾台電腦。
  * 每台電腦各自一組 pcId＋配對碼，存在 prefs（JSON）。
- * 找電腦：UDP 廣播 `LMD|<nonce>` 到 47801，電腦回 `LMH|pcId|主機名|自訂名稱|（保留欄）|hmac`，
+ * 找電腦：UDP 廣播 `LMD|<nonce>` 到 47801，電腦回 `LMH|pcId|主機名|自訂名稱|螢幕清單（寬x高，* 主螢幕，; 分隔）|hmac`，
  * hmac＝HMAC-SHA256(配對碼, nonce|pcId) 前 16 字——區網上別人冒充不了某台電腦（冒充的話滑鼠訊號跟配對碼會被騙走）。
  * 名稱以電腦端 name.txt 為準：手機改名送 `n`，電腦端圖示改名下次被找到時同步回來。
  */
@@ -35,6 +35,56 @@ public final class PcList {
     public static final class Pc {
         public String id, token, name = "", hostname = "", ip = "";
         public int port = 47801;
+        public int scrW, scrH;   // 電腦主螢幕像素（繪圖板畫比例用；0＝不知道，舊版電腦端不回）
+        public String mons = "";  // 電腦回報的螢幕清單原文，例 "1920x1080*;2560x1440"
+        public int mon = -1;      // 舊欄位（11-20 09:3x 單選版）：-1＝主螢幕、-2＝全部；新版改用 monSel，讀到舊值時轉過去
+        public static final int MON_ALL = -2;
+        public String monSel = "";   // 繪圖板勾選了哪些螢幕（編號逗號分隔；空＝只有主螢幕）
+        /** 勾選的螢幕編號（照編號排序、去掉不存在的；一個都沒有＝主螢幕）。 */
+        public List<Integer> selectedMons() {
+            List<int[]> ms = monitors();
+            java.util.TreeSet<Integer> set = new java.util.TreeSet<>();
+            if (monSel.isEmpty() && mon == MON_ALL) for (int i = 0; i < ms.size(); i++) set.add(i);
+            else if (monSel.isEmpty() && mon >= 0) set.add(mon);
+            for (String t : monSel.split(",")) try { set.add(Integer.parseInt(t.trim())); } catch (Exception ignored) {}
+            List<Integer> l = new ArrayList<>();
+            for (int i : set) if (i >= 0 && i < ms.size()) l.add(i);
+            if (l.isEmpty()) { for (int i = 0; i < ms.size(); i++) if (ms.get(i)[2] == 1) l.add(i); }
+            if (l.isEmpty() && !ms.isEmpty()) l.add(0);
+            return l;
+        }
+        public void setSelectedMons(List<Integer> l) {
+            StringBuilder b = new StringBuilder();
+            for (int i : l) { if (b.length() > 0) b.append(','); b.append(i); }
+            monSel = b.toString(); mon = -1;
+        }
+        /** 螢幕清單：每個 {寬, 高, 是不是主螢幕, x, y}（x、y＝在虛擬桌面上的位置；舊電腦端沒給就是 0）。 */
+        public List<int[]> monitors() {
+            List<int[]> l = new ArrayList<>();
+            for (String m : mons.split(";")) {
+                java.util.regex.Matcher x = java.util.regex.Pattern.compile("^(\\d{3,5})x(\\d{3,5})(?:@(-?\\d{1,6}),(-?\\d{1,6}))?(\\*?)$").matcher(m.trim());
+                if (x.find()) l.add(new int[]{Integer.parseInt(x.group(1)), Integer.parseInt(x.group(2)), x.group(5).isEmpty() ? 0 : 1,
+                        x.group(3) == null ? 0 : Integer.parseInt(x.group(3)), x.group(4) == null ? 0 : Integer.parseInt(x.group(4))});
+            }
+            return l;
+        }
+        /** 全部同時顯示（而且真的有兩個以上螢幕）。 */
+        public boolean showAll() { return selectedMons().size() > 1; }
+        /** 目前選的螢幕在清單裡的編號（沒選或超出＝主螢幕；完全不知道＝-1）。 */
+        public int monIndex() {
+            List<int[]> l = monitors();
+            List<Integer> sel = selectedMons();
+            if (!sel.isEmpty()) return sel.get(0);
+            if (mon >= 0 && mon < l.size()) return mon;
+            for (int i = 0; i < l.size(); i++) if (l.get(i)[2] == 1) return i;
+            return l.isEmpty() ? -1 : 0;
+        }
+        /** 選的螢幕的寬高比（不知道就用主螢幕、再不知道 16:9）。 */
+        public float aspect() {
+            int i = monIndex();
+            if (i >= 0) { int[] m = monitors().get(i); return m[0] / (float) m[1]; }
+            return scrW > 0 && scrH > 0 ? scrW / (float) scrH : 16f / 9f;
+        }
         public long lastSeen;
         public transient boolean online;
         public String label() {
@@ -43,13 +93,15 @@ public final class PcList {
         }
         JSONObject json() throws Exception {
             return new JSONObject().put("id", id).put("token", token).put("name", name).put("hostname", hostname)
-                    .put("ip", ip).put("port", port).put("lastSeen", lastSeen);
+                    .put("ip", ip).put("port", port).put("lastSeen", lastSeen).put("scrW", scrW).put("scrH", scrH).put("mons", mons).put("mon", mon).put("monSel", monSel);
         }
         static Pc from(JSONObject o) {
             Pc p = new Pc();
             p.id = o.optString("id"); p.token = o.optString("token"); p.name = o.optString("name");
             p.hostname = o.optString("hostname"); p.ip = o.optString("ip");
             p.port = o.optInt("port", 47801); p.lastSeen = o.optLong("lastSeen");
+            p.scrW = o.optInt("scrW"); p.scrH = o.optInt("scrH");
+            p.mons = o.optString("mons"); p.mon = o.optInt("mon", -1); p.monSel = o.optString("monSel");
             return p;
         }
     }
@@ -171,7 +223,12 @@ public final class PcList {
                         p.id = f[1];
                         if (wasSel) select(p.id);
                     }
-                    p.ip = ip; p.hostname = f[2]; p.name = f[3];   // f[4] 是舊版的藍牙位址欄，留著位置相容、不用
+                    p.ip = ip; p.hostname = f[2]; p.name = f[3];
+                    // f[4]：螢幕清單「寬x高[*];…」（11-20 起）；只有一個「寬x高」是更早的版本；0.10.0 之前是藍牙位址或空的
+                    if (f[4].matches("^[0-9x*;@,\\-]+$")) {
+                        p.mons = f[4];
+                        for (int[] m : p.monitors()) if (m[2] == 1 || p.monitors().size() == 1) { p.scrW = m[0]; p.scrH = m[1]; }
+                    }
                     p.lastSeen = System.currentTimeMillis();
                     found.add(p.id);
                 }

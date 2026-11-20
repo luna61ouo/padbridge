@@ -7,7 +7,7 @@ import android.content.Intent;
 /**
  * adb 測試入口（之後手錶轉送也走同一組動作）。只有 adb shell 能送（manifest 要求 DUMP 權限）。
  *   am broadcast -a io.github.luna61ouo.padbridge.CMD -p io.github.luna61ouo.padbridge --es op move --ei dx 100 --ei dy 0
- *   op: move(dx,dy) | wheel(n) | click(btn) | down(btn) | up(btn) | wifi(host,port,token) | pcs（找電腦並列出）| selpc(id) | rmpc(id) | flag(name,on)
+ *   op: move(dx,dy) | wheel(n) | click(btn) | down(btn) | up(btn) | wifi(host,port,token) | abs(x,y 0～65535, press 1/0/-1) | pcs（找電腦並列出）| selpc(id) | rmpc(id) | flag(name,on)
  */
 public class MouseReceiver extends BroadcastReceiver {
     @Override public void onReceive(Context c, Intent i) {
@@ -24,7 +24,7 @@ public class MouseReceiver extends BroadcastReceiver {
                     PcList.Pc sel = hub.pcs().selected();
                     for (PcList.Pc p : hub.pcs().sorted())
                         sb.append(sel != null && sel.id.equals(p.id) ? "*" : " ").append(p.online ? "on  " : "off ")
-                          .append(p.id).append(' ').append(p.label()).append(' ').append(p.ip).append('\n');
+                          .append(p.id).append(' ').append(p.label()).append(' ').append(p.ip).append(' ').append(p.scrW).append('x').append(p.scrH).append('\n');
                     pr.setResultData(sb.toString()); pr.finish();
                 }).start();
                 return;
@@ -32,6 +32,7 @@ public class MouseReceiver extends BroadcastReceiver {
             case "selpc": hub.selectPc(i.getStringExtra("id")); break;
             case "rmpc": hub.pcs().remove(i.getStringExtra("id")); break;
             case "move": hub.move(i.getIntExtra("dx", 0), i.getIntExtra("dy", 0)); break;
+            case "abs": hub.absolute(i.getIntExtra("x", 32768), i.getIntExtra("y", 32768), i.getIntExtra("press", -1)); break;
             case "wheel": hub.wheel(i.getIntExtra("n", 0)); break;
             case "click": hub.click(btn); break;
             case "down": hub.button(btn, true); break;

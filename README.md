@@ -21,6 +21,12 @@ Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 控制�
 - 一支手機可以控多台電腦（App 裡切換），多支手機也可以控同一台電腦（各自配對）
 - 跟眼鏡、耳機、手錶等藍牙裝置並存，不搶藍牙
 - 觸控板：單指移動、點一下左鍵、雙指點右鍵、雙指上下捲動、按住再滑拖曳
+- **繪圖板模式**（絕對座標，配一支觸控筆就是繪圖板）：
+  - 畫布＝電腦螢幕，碰哪裡游標就到哪裡；直放（下方有手掌區）或橫放（大畫布）
+  - 兩種點擊：「自動左鍵」碰到就按下；「按鍵觸發」碰到只移動（像筆懸空），用畫面按鍵或音量鍵點擊
+  - 畫面預覽：電腦畫面加密後傳到手機當畫布背景（約每秒 10 張）
+  - 兩指縮放／拖曳＝只對應螢幕的一部分；「調整範圍」＝只用手機畫面的一小塊（節奏遊戲常用）
+  - 多螢幕：勾選要顯示哪些螢幕，勾兩個以上就同時排在畫布上、碰哪個到哪個，每個螢幕的觸控範圍可以各自調整
 - 配對：電腦圖示顯示 QR，手機 App 掃一下就好
 - 電腦端圖示：顯示連入的手機（名稱可自訂）與使用狀態，可暫停、可撤銷某支手機
 
@@ -63,7 +69,7 @@ Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 控制�
 ### 目前限制
 
 - 電腦端目前只支援 Windows；App 介面目前是中文
-- 規劃中：繪圖板模式（絕對座標，配觸控筆就能當繪圖板）、鍵盤／搖桿／手勢轉送
+- 規劃中：鍵盤／搖桿／手勢轉送、筆壓、低延遲畫面串流
 - 0.9.0 的藍牙（BLE）模式已移除：要穩定得靠一個用 adb 權限跑的小幫手，對一般使用者來說要開的權限太大
 
 ### 授權
@@ -87,6 +93,12 @@ The mouse is just the first piece. Padbridge aims to be an **input relay**: the 
 - One phone can drive several PCs (switch in the app), and several phones can share one PC (each paired separately)
 - Coexists with Bluetooth glasses, headsets and watches — it doesn't use Bluetooth at all
 - Touchpad: one-finger move, tap = left click, two-finger tap = right click, two-finger scroll, press-and-hold then move to drag
+- **Drawing-tablet mode** (absolute positioning — add a stylus and it's a pen tablet):
+  - The canvas is your PC screen: touch a point and the cursor jumps there; portrait (with a palm-rest zone) or landscape (bigger canvas)
+  - Two click styles: "auto left button" presses on touch; "button trigger" only moves on touch (like a hovering pen) and clicks with on-screen buttons or the volume keys
+  - Screen preview: the PC screen is encrypted and streamed to the phone as the canvas background (~10 fps)
+  - Pinch / two-finger drag maps the canvas to part of the screen; "adjust area" uses only part of the phone screen (common for rhythm games)
+  - Multiple monitors: tick which monitors to show; with two or more they're laid out together, touch one to use it, and each monitor's area can be moved and resized
 - Pairing: the PC tray icon shows a QR code; scan it in the app
 - Tray icon: lists connected phones (custom names) and their status, pause, revoke a phone
 
@@ -129,7 +141,7 @@ Requires the Android SDK (platform 35, build-tools 35.0.0) and JDK 11+. No Gradl
 ### Limitations
 
 - PC side is Windows-only for now; the app UI is in Chinese for now
-- Planned: drawing-tablet mode (absolute positioning — add a stylus and it works as a pen tablet), keyboard / gamepad / gesture relaying
+- Planned: keyboard / gamepad / gesture relaying, pen pressure, low-latency screen streaming
 - The Bluetooth LE mode from 0.9.0 has been removed: making it reliable required a helper running with adb privileges, which is too much access to ask of normal users
 
 ### License

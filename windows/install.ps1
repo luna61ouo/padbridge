@@ -33,7 +33,7 @@ if ($Uninstall) {
 }
 
 
-if (-not (Test-Path (Join-Path $dir 'PadbridgeReceiver.ps1')) -or -not (Test-Path (Join-Path $dir 'PadbridgeQr.cs'))) {
+if (-not (Test-Path (Join-Path $dir 'PadbridgeReceiver.ps1')) -or -not (Test-Path (Join-Path $dir 'PadbridgeQr.cs')) -or -not (Test-Path (Join-Path $dir 'PadbridgeFrames.cs'))) {
     Write-Host "找不到 $dir 裡的程式檔，請重新下載安裝包。" -ForegroundColor Red
     Read-Host '按 Enter 關閉'; exit 1
 }

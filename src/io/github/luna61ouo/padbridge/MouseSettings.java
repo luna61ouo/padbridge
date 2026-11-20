@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
  */
 public final class MouseSettings {
     public static final String WIFI_LOW_LATENCY = "wifiLowLatency";
+    public static final String TABLET_PRESS = "tabletPress";   // 繪圖板：true＝自動左鍵、false＝按鍵觸發（畫面上切，不放設定頁）
 
     public static final class Toggle {
         public final String key, title, help; public final boolean def;
@@ -25,7 +26,7 @@ public final class MouseSettings {
 
     public boolean on(String key) {
         for (Toggle t : ALL) if (t.key.equals(key)) return p.getBoolean(key, t.def);
-        return p.getBoolean(key, false);
+        return p.getBoolean(key, TABLET_PRESS.equals(key));
     }
     public void set(String key, boolean v) { p.edit().putBoolean(key, v).apply(); }
 

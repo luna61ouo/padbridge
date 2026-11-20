@@ -1,5 +1,7 @@
 ﻿# Padbridge 的 Windows 接收端：收手機經 Wi-Fi 送來的 UDP 簽章封包，用 SendInput 移動游標、按鍵、捲動。
 # 封包：v2|流水號|m|dx|dy|簽章  /  v2|流水號|w|格數|簽章  /  v2|流水號|b|鍵(1左 2右 4中)|1按下或0放開|簽章
+#       /  v2|流水號|a|x|y|按鍵|螢幕編號|簽章（繪圖板：x、y＝0～65535 對應那個螢幕；按鍵 1 按下左鍵、0 放開、-1 不動；沒螢幕編號＝主螢幕）
+#       /  v2|流水號|f|x|y|寬|高|輸出寬|輸出高|簽章（繪圖板要畫面，見 PadbridgeFrames）
 #       /  v2|流水號|s|wifi|手機名稱|簽章  /  v2|流水號|n|新名稱|簽章（簽章＝HMAC-SHA256(配對碼, 前面整段) 前 16 字）
 # 配對碼放在 %LOCALAPPDATA%\Padbridge\phone-<id>.token（不會出現在網路上），簽章對不上的封包一律丟掉。
 # 右下角有一個月亮小圖示：滑過去看狀態，右鍵可以暫停／結束（能動滑鼠的程式要看得到在跑）。
@@ -95,6 +97,10 @@ public static class PadbridgeInput {
         SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));
     }
     public static void Move(int dx, int dy) { Send(dx, dy, 0, 0x0001); }
+    // 絕對座標：MOVE|ABSOLUTE，0～65535 對應主螢幕（不加 VIRTUALDESK）
+    public static void Abs(int x, int y) { Send(x, y, 0, 0x8001); }
+    // 多螢幕：0～65535 對應整個虛擬桌面（MOVE|ABSOLUTE|VIRTUALDESK）
+    public static void AbsV(int x, int y) { Send(x, y, 0, 0xC001); }
     public static void Wheel(int n) { Send(0, 0, unchecked((uint)(n * 120)), 0x0800); }
     public static void Button(int btn, bool down) {
         uint f = 0;
@@ -106,6 +112,29 @@ public static class PadbridgeInput {
 }
 "@
 
+# ---- 繪圖板畫面預覽：手機要（f 封包、每秒一次續約），這裡在背景執行緒截「畫布對應的那一塊」、縮小、加密，分段用 UDP 回給手機 ----
+# 加密：AES-256-CBC＋HMAC-SHA256（先加密再簽），金鑰從那支手機的配對碼導出；畫面可能有私人內容，一定要加密。
+# 分段：每段 "PBF1"＋畫格號(4)＋第幾段(2)＋共幾段(2)＋最多 1200 位元組。整格＝IV(16)＋密文＋MAC(32)，MAC 蓋 畫格號＋IV＋密文。
+Add-Type -ReferencedAssemblies System.Drawing -Path (Join-Path $dir 'PadbridgeFrames.cs')
+[PadbridgeFrames]::DpiAware()   # 截圖要真實像素（不然有縮放的螢幕會截錯位置）；SendInput 絕對座標本來就是比例，不受影響
+
+# ---- 多螢幕：清單順序＝Screen.AllScreens（DPI aware 之後是真實像素）。找電腦回應第 5 欄送「寬x高@x,y[*];…」，* ＝主螢幕 ----
+Add-Type -AssemblyName System.Windows.Forms
+function Update-Monitors {
+    $script:mons = @([System.Windows.Forms.Screen]::AllScreens | ForEach-Object { $_ })
+    $script:vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
+    $script:monList = ($script:mons | ForEach-Object { "$($_.Bounds.Width)x$($_.Bounds.Height)@$($_.Bounds.X),$($_.Bounds.Y)" + $(if ($_.Primary) { '*' } else { '' }) }) -join ';'
+}
+Update-Monitors
+function Get-MonIndex([string]$i) {
+    $k = -1; if ([int]::TryParse($i, [ref]$k) -and $k -ge 0 -and $k -lt $script:mons.Count) { return $k }
+    for ($j = 0; $j -lt $script:mons.Count; $j++) { if ($script:mons[$j].Primary) { return $j } }
+    0
+}
+function Get-Mon([string]$i) {
+    $k = -1; if (-not [int]::TryParse($i, [ref]$k) -or $k -lt 0 -or $k -ge $script:mons.Count) { return ($script:mons | Where-Object { $_.Primary } | Select-Object -First 1) }
+    $script:mons[$k]
+}
 "$(Get-Date -Format s) start port=$port" | Out-File -Append -Encoding utf8 $log
 $udp = New-Object System.Net.Sockets.UdpClient($port)
 $ep = New-Object System.Net.IPEndPoint([System.Net.IPAddress]::Any, 0)
@@ -292,7 +321,8 @@ try {
                     $nm = Get-PcName
                     # 每把配對碼各算一個證明（逗號分隔）：手機拿自己那把對得上任何一個，就知道是這台、而且這台認得它
                     $proofs = (@($script:phones.Values | ForEach-Object { Get-Hmac $_ "$($p[1])|$pcId" }) -join ',')
-                    $r = [Text.Encoding]::UTF8.GetBytes("LMH|$pcId|$env:COMPUTERNAME|$nm||$proofs")
+                    # 第 5 欄：主螢幕寬x高（手機的繪圖板照這個比例畫；只要比例，DPI 縮放不影響）
+                    $r = [Text.Encoding]::UTF8.GetBytes("LMH|$pcId|$env:COMPUTERNAME|$nm|$($script:monList)|$proofs")
                     $null = $udp.Send($r, $r.Length, $ep)
                     continue
                 }
@@ -313,6 +343,22 @@ try {
                             if ($lastM -ge 0) { $g = $t - $lastM; if ($g -gt 300) { Flush-Stats } else { $gaps.Add($g) } }
                             $lastM = $t
                         }
+                        'a' {
+                            if ($script:paused) { break }
+                            if ($p.Length -ge 8) {   # 新版手機帶螢幕編號：換算成整個虛擬桌面上的位置
+                                $mb = (Get-Mon $p[6]).Bounds; $v = $script:vs
+                                $gx = $mb.X + [double]$p[3] / 65535 * ($mb.Width - 1); $gy = $mb.Y + [double]$p[4] / 65535 * ($mb.Height - 1)
+                                [PadbridgeInput]::AbsV([int](($gx - $v.X) * 65535 / [Math]::Max(1, $v.Width - 1)), [int](($gy - $v.Y) * 65535 / [Math]::Max(1, $v.Height - 1)))
+                            } else { [PadbridgeInput]::Abs([int]$p[3], [int]$p[4]) }
+                            if ($p[5] -eq '1') { [PadbridgeInput]::Button(1, $true) } elseif ($p[5] -eq '0') { [PadbridgeInput]::Button(1, $false) }
+                            $script:lastPkt = Get-Date; $ph.lastPkt = $script:lastPkt
+                        }
+                        'f' {   # 繪圖板要畫面：f|x|y|寬|高（0～65535，相對於那個螢幕）|輸出寬|輸出高|螢幕編號；回到發這包的那個位置
+                            if ($p.Length -ge 10) {
+                                $mi = Get-MonIndex $(if ($p.Length -ge 11) { $p[9] } else { '' }); $mb = $script:mons[$mi].Bounds
+                                [PadbridgeFrames]::Request($ep.Address.ToString(), $ep.Port, $ph.token, [int]$p[3], [int]$p[4], [int]$p[5], [int]$p[6], [int]$p[7], [int]$p[8], $mb.X, $mb.Y, $mb.Width, $mb.Height, $mi)
+                            }
+                        }
                         'w' { if (-not $script:paused) { [PadbridgeInput]::Wheel([int]$p[3]); $script:lastPkt = Get-Date; $ph.lastPkt = $script:lastPkt } }
                         'b' { if (-not $script:paused) { [PadbridgeInput]::Button([int]$p[3], $p[4] -eq '1'); $script:lastPkt = Get-Date; $ph.lastPkt = $script:lastPkt } }
                         's' {   # 手機回報名稱（s|wifi|名稱；第二欄是舊版的模式欄）
@@ -327,7 +373,7 @@ try {
         [System.Windows.Forms.Application]::DoEvents()
         if ($tipTimer.ElapsedMilliseconds -gt 1000) {
             Update-Tip; $tipTimer.Restart()
-            if ((++$script:tick % 10) -eq 0) { Load-Phones }   # 安裝檔新加的手機（phone-*.token）不用重開也認得
+            if ((++$script:tick % 10) -eq 0) { Load-Phones; Update-Monitors }   # 螢幕插拔、改解析度也跟得上   # 安裝檔新加的手機（phone-*.token）不用重開也認得
         }
     }
 } finally {
