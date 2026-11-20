@@ -27,6 +27,8 @@ Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 控制�
   - 畫面預覽：電腦畫面加密後傳到手機當畫布背景（約每秒 10 張）
   - 兩指縮放／拖曳＝只對應螢幕的一部分；「調整範圍」＝只用手機畫面的一小塊（節奏遊戲常用）
   - 多螢幕：勾選要顯示哪些螢幕，勾兩個以上就同時排在畫布上、碰哪個到哪個，每個螢幕的觸控範圍可以各自調整
+- **Android 被控端（實驗中）**：另一台 Android（例如車機、平板）裝同一支 App、開「Padbridge 被控端」無障礙服務，就會出現在「選電腦」清單裡——觸控板移動畫面上的游標、點一下＝點擊、按住拖曳＝放開後滑過去、捲動＝上下滑、右鍵＝返回、中鍵＝主畫面；繪圖板模式也能用，畫面預覽約每秒 3 張（Android 截圖頻率限制，需要 Android 11 以上）。目前還沒有設定畫面，配對要用 adb：
+  `adb shell am broadcast -a io.github.luna61ouo.padbridge.CMD -p io.github.luna61ouo.padbridge --es op rxtoken --es id <控制端名稱> --es token <自訂配對碼>`，控制端用 `--es op wifi --es host <被控端 IP> --ei port 47801 --es token <同一組配對碼>` 加入
 - 配對：電腦圖示顯示 QR，手機 App 掃一下就好
 - 電腦端圖示：顯示連入的手機（名稱可自訂）與使用狀態，可暫停、可撤銷某支手機
 
@@ -99,6 +101,8 @@ The mouse is just the first piece. Padbridge aims to be an **input relay**: the 
   - Screen preview: the PC screen is encrypted and streamed to the phone as the canvas background (~10 fps)
   - Pinch / two-finger drag maps the canvas to part of the screen; "adjust area" uses only part of the phone screen (common for rhythm games)
   - Multiple monitors: tick which monitors to show; with two or more they're laid out together, touch one to use it, and each monitor's area can be moved and resized
+- **Android as the controlled device (experimental)**: install the same app on another Android device (a car head unit, a tablet…) and enable the "Padbridge 被控端" accessibility service; it then shows up in the PC list. The touchpad moves an on-screen cursor, tap = tap, press-and-drag = swipe along the path on release, scroll = swipe up/down, right button = Back, middle button = Home. Drawing-tablet mode works too, with a ~3 fps screen preview (Android's screenshot rate limit; needs Android 11+). There is no settings screen yet, so pairing needs adb:
+  `adb shell am broadcast -a io.github.luna61ouo.padbridge.CMD -p io.github.luna61ouo.padbridge --es op rxtoken --es id <controller-name> --es token <your-pairing-code>`, then on the controller `--es op wifi --es host <device-IP> --ei port 47801 --es token <same-code>`
 - Pairing: the PC tray icon shows a QR code; scan it in the app
 - Tray icon: lists connected phones (custom names) and their status, pause, revoke a phone
 

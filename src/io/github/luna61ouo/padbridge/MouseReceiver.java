@@ -33,6 +33,9 @@ public class MouseReceiver extends BroadcastReceiver {
             case "rmpc": hub.pcs().remove(i.getStringExtra("id")); break;
             case "move": hub.move(i.getIntExtra("dx", 0), i.getIntExtra("dy", 0)); break;
             case "abs": hub.absolute(i.getIntExtra("x", 32768), i.getIntExtra("y", 32768), i.getIntExtra("press", -1)); break;
+            case "rxtoken": RemoteService.putToken(c, i.getStringExtra("id"), i.getStringExtra("token")); setResultData(RemoteService.info(c)); return;   // 被控端：加／刪（token 空）一支手機的配對碼
+            case "rxinfo": setResultData(RemoteService.info(c)); return;
+            case "rxname": c.getSharedPreferences("remote", Context.MODE_PRIVATE).edit().putString("name", i.getStringExtra("name")).apply(); setResultData(RemoteService.info(c)); return;
             case "wheel": hub.wheel(i.getIntExtra("n", 0)); break;
             case "click": hub.click(btn); break;
             case "down": hub.button(btn, true); break;

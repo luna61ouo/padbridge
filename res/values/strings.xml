@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Padbridge</string>
+    <string name="remote_desc">讓另一支手機的 Padbridge 控制這台裝置：顯示游標、在游標位置點擊與滑動。只接受用配對碼簽章過的指令。</string>
+    <string name="remote_label">Padbridge 被控端</string>
 </resources>
