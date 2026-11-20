@@ -29,10 +29,18 @@ fi
 rm -rf build && mkdir -p build/gen build/classes build/assets/PadbridgeSetup
 # Windows 通用安裝包（不含任何配對碼）：打進 APK 讓手機能在區網提供下載；release.sh 也直接拿這一個上傳，
 # 所以 GitHub 上的跟手機給的是同一個檔（SHA-256 一樣）。時間戳固定，重建內容不變時位元組也不變。
-cp windows/PadbridgeSetup.cmd windows/install.ps1 windows/PadbridgeReceiver.ps1 windows/PadbridgeQr.cs windows/PadbridgeFrames.cs \
+cp windows/PadbridgeSetup.cmd windows/install.ps1 windows/PadbridgeReceiver.ps1 windows/PadbridgeRestart.ps1 windows/PadbridgeQr.cs windows/PadbridgeFrames.cs windows/PadbridgeKeys.cs windows/PadbridgeUpdate.cs \
    LICENSE NOTICE build/assets/PadbridgeSetup/
+# 版本號放進安裝包（跟著簽名）：電腦端靠它判斷新舊、回報給手機，也擋「拿舊的簽名包降版」
+sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' AndroidManifest.xml | tr -d '\n' > build/assets/PadbridgeSetup/version.txt
 touch -d '2026-01-01 00:00:00 UTC' build/assets/PadbridgeSetup build/assets/PadbridgeSetup/*
 ( cd build/assets && find PadbridgeSetup | LC_ALL=C sort | zip -qX -@ PadbridgeSetup-windows.zip && rm -rf PadbridgeSetup )
+# 發布簽名（電腦端自動更新只裝簽過的）：PADBRIDGE_UPDATE_KEY＝RSA 私鑰 PEM。沒有就不簽（自己編的版本不能自動更新電腦端）。
+if [ -n "${PADBRIDGE_UPDATE_KEY:-}" ] && [ -f "$PADBRIDGE_UPDATE_KEY" ]; then
+    openssl dgst -sha256 -sign "$PADBRIDGE_UPDATE_KEY" build/assets/PadbridgeSetup-windows.zip | base64 -w0 > build/assets/PadbridgeSetup-windows.zip.sig
+else
+    echo "（沒有 PADBRIDGE_UPDATE_KEY：電腦端安裝包不簽名，這版不能用自動更新推給電腦）"
+fi
 "$BT/aapt2" compile --dir res -o build/res.zip
 "$BT/aapt2" link --manifest AndroidManifest.xml --min-sdk-version 29 --target-sdk-version 35 \
     --auto-add-overlay -I "$ANDROID_JAR" -R build/res.zip -A build/assets --java build/gen -o build/app-no-dex.apk

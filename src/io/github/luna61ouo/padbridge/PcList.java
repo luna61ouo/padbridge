@@ -36,6 +36,7 @@ public final class PcList {
         public String id, token, name = "", hostname = "", ip = "";
         public int port = 47801;
         public int scrW, scrH;   // 電腦主螢幕像素（繪圖板畫比例用；0＝不知道，舊版電腦端不回）
+        public String ver = "";   // 電腦端版本（找電腦回應第 7 欄）；"" ＝沒回報＝舊版、不能自動更新
         public String mons = "";  // 電腦回報的螢幕清單原文，例 "1920x1080*;2560x1440"
         public int mon = -1;      // 舊欄位（11-20 09:3x 單選版）：-1＝主螢幕、-2＝全部；新版改用 monSel，讀到舊值時轉過去
         public static final int MON_ALL = -2;
@@ -93,7 +94,7 @@ public final class PcList {
         }
         JSONObject json() throws Exception {
             return new JSONObject().put("id", id).put("token", token).put("name", name).put("hostname", hostname)
-                    .put("ip", ip).put("port", port).put("lastSeen", lastSeen).put("scrW", scrW).put("scrH", scrH).put("mons", mons).put("mon", mon).put("monSel", monSel);
+                    .put("ip", ip).put("port", port).put("lastSeen", lastSeen).put("scrW", scrW).put("scrH", scrH).put("mons", mons).put("mon", mon).put("monSel", monSel).put("ver", ver);
         }
         static Pc from(JSONObject o) {
             Pc p = new Pc();
@@ -101,7 +102,7 @@ public final class PcList {
             p.hostname = o.optString("hostname"); p.ip = o.optString("ip");
             p.port = o.optInt("port", 47801); p.lastSeen = o.optLong("lastSeen");
             p.scrW = o.optInt("scrW"); p.scrH = o.optInt("scrH");
-            p.mons = o.optString("mons"); p.mon = o.optInt("mon", -1); p.monSel = o.optString("monSel");
+            p.mons = o.optString("mons"); p.mon = o.optInt("mon", -1); p.monSel = o.optString("monSel"); p.ver = o.optString("ver");
             return p;
         }
     }
@@ -229,6 +230,8 @@ public final class PcList {
                         p.mons = f[4];
                         for (int[] m : p.monitors()) if (m[2] == 1 || p.monitors().size() == 1) { p.scrW = m[0]; p.scrH = m[1]; }
                     }
+                    // f[6]：電腦端版本（11-20 起；沒有這欄＝舊版，不能自動更新）。有這欄但空的＝不知道版本，當最舊
+                    p.ver = f.length >= 7 ? (f[6].isEmpty() ? "0" : f[6]) : "";
                     p.lastSeen = System.currentTimeMillis();
                     found.add(p.id);
                 }

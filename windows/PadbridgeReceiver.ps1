@@ -2,6 +2,8 @@
 # 封包：v2|流水號|m|dx|dy|簽章  /  v2|流水號|w|格數|簽章  /  v2|流水號|b|鍵(1左 2右 4中)|1按下或0放開|簽章
 #       /  v2|流水號|a|x|y|按鍵|螢幕編號|簽章（繪圖板：x、y＝0～65535 對應那個螢幕；按鍵 1 按下左鍵、0 放開、-1 不動；沒螢幕編號＝主螢幕）
 #       /  v2|流水號|f|x|y|寬|高|輸出寬|輸出高|簽章（繪圖板要畫面，見 PadbridgeFrames）
+#       /  v2|流水號|x|加密內容|簽章（鍵盤：按鍵狀態、打字，見 PadbridgeKeys.cs）
+#       /  v2|流水號|u|port|路徑|簽章（手機叫我更新：去 http://手機:port/路徑/zip 與 /sig 拿，驗發布簽名才裝，見 PadbridgeUpdate.cs）
 #       /  v2|流水號|s|wifi|手機名稱|簽章  /  v2|流水號|n|新名稱|簽章（簽章＝HMAC-SHA256(配對碼, 前面整段) 前 16 字）
 # 配對碼放在 %LOCALAPPDATA%\Padbridge\phone-<id>.token（不會出現在網路上），簽章對不上的封包一律丟掉。
 # 右下角有一個月亮小圖示：滑過去看狀態，右鍵可以暫停／結束（能動滑鼠的程式要看得到在跑）。
@@ -31,6 +33,7 @@ function New-PhoneObj($id, $tok) {
         hmac = New-Object System.Security.Cryptography.HMACSHA256 (, [Text.Encoding]::UTF8.GetBytes($tok))
         name = $(if (Test-Path $nf) { (Get-Content $nf -Raw -Encoding UTF8).Trim() } else { '' })
         lastCtr = [int64]0; lastPkt = $null; mode = ''; ip = $null
+        keyEnc = $null
     }
 }
 function Load-Phones {
@@ -134,6 +137,31 @@ function Get-MonIndex([string]$i) {
 function Get-Mon([string]$i) {
     $k = -1; if (-not [int]::TryParse($i, [ref]$k) -or $k -lt 0 -or $k -ge $script:mons.Count) { return ($script:mons | Where-Object { $_.Primary } | Select-Object -First 1) }
     $script:mons[$k]
+}
+# ---- 鍵盤：解密、按鍵狀態、連發、1 秒沒消息就全部放開（PadbridgeKeys.cs）----
+Add-Type -Path (Join-Path $dir 'PadbridgeKeys.cs')
+# ---- 自動更新（PadbridgeUpdate.cs）：只裝發布金鑰簽過名、而且比現在新的安裝包；有新版先提示，按了才更新 ----
+Add-Type -ReferencedAssemblies System.IO.Compression -Path (Join-Path $dir 'PadbridgeUpdate.cs')
+$verFile = Join-Path $dir 'version.txt'
+$script:myVer = $(if (Test-Path $verFile) { (Get-Content $verFile -Raw).Trim() } else { '' })
+$noCheckFile = Join-Path $dir 'no-update-check'
+function Apply-Update([string]$src, [string]$ver) {
+    $inst = Join-Path $dir 'install.ps1'
+    $old = $(if (Test-Path $inst) { (Get-FileHash $inst).Hash } else { '' })
+    Get-ChildItem -LiteralPath $src -File | Where-Object { $_.Extension -in '.ps1', '.cs', '.cmd', '.txt' } | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination $dir -Force; Unblock-File -LiteralPath (Join-Path $dir $_.Name) -ErrorAction SilentlyContinue
+    }
+    Remove-Item -LiteralPath $src -Recurse -Force -ErrorAction SilentlyContinue
+    "$(Get-Date -Format s) updated $($script:myVer) -> $ver" | Out-File -Append -Encoding utf8 $log
+    if ($old -ne (Get-FileHash $inst).Hash) {
+        # 這版改了防火牆／排程：跑一次安裝（會跳管理員確認；它會停掉我、再用排程把新版叫起來）
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$inst`" -Dir `"$dir`" -User `"$env:USERDOMAIN\$env:USERNAME`""
+        $tray.ShowBalloonTip(8000, 'Padbridge 已更新到 ' + $ver, '這一版要再跑一次安裝：請在跳出的視窗按「是」。', 'Info')
+        return
+    }
+    # 只換程式檔：開一個小幫手等我結束後把新版叫起來
+    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $dir 'PadbridgeRestart.ps1')`" -WaitPid $PID -Dir `"$dir`""
+    $script:running = $false
 }
 "$(Get-Date -Format s) start port=$port" | Out-File -Append -Encoding utf8 $log
 $udp = New-Object System.Net.Sockets.UdpClient($port)
@@ -272,14 +300,25 @@ $menu.add_Opening({
     Build-PhoneMenu
     $nm = Get-PcName
     $miName.Text = "名稱：$(if ($nm) { $nm } else { $env:COMPUTERNAME })（主機名 $env:COMPUTERNAME）— 點一下改"
+    $miAutoCheck.Checked = -not (Test-Path $noCheckFile)
+    $miUpdate.Text = $(if ([PadbridgeUpdate]::Compare([PadbridgeUpdate]::LatestVer, $script:myVer) -gt 0) { "更新到 $([PadbridgeUpdate]::LatestVer)（目前 $($script:myVer)）" } else { "檢查更新（目前 $(if ($script:myVer) { $script:myVer } else { '舊版' })）" })
     $ips = @(Get-LanIPs)
     $miIp.Text = $(if ($ips.Count) { "電腦 IP：$($ips -join ', ')（點一下複製）" } else { '電腦 IP：找不到（沒連上家裡網路？）' })
 })
+$miUpdate = $menu.Items.Add('檢查更新')
+$miUpdate.add_Click({
+    if ([PadbridgeUpdate]::Compare([PadbridgeUpdate]::LatestVer, $script:myVer) -gt 0) {
+        [PadbridgeUpdate]::FetchAsync([PadbridgeUpdate]::LatestZip, [PadbridgeUpdate]::LatestSig, $script:myVer)
+        $tray.ShowBalloonTip(4000, 'Padbridge', '正在下載 ' + [PadbridgeUpdate]::LatestVer + '…', 'Info')
+    } else { $script:manualCheck = $true; [PadbridgeUpdate]::CheckGithubAsync() }
+})
+$miAutoCheck = $menu.Items.Add('每天自動檢查更新')
+$miAutoCheck.add_Click({ if (Test-Path $noCheckFile) { Remove-Item $noCheckFile -Force } else { [IO.File]::WriteAllText($noCheckFile, '') } })
 $null = $menu.Items.Add('-')
 $miPause = $menu.Items.Add('暫停（手機動不了滑鼠）')
 $miPause.add_Click({
     $script:paused = -not $script:paused
-    if ($script:paused) { foreach ($b in 1, 2, 4) { [PadbridgeInput]::Button($b, $false) } }
+    if ($script:paused) { foreach ($b in 1, 2, 4) { [PadbridgeInput]::Button($b, $false) }; [PadbridgeKeys]::ReleaseAll() }
     $miPause.Text = $(if ($script:paused) { '繼續' } else { '暫停（手機動不了滑鼠）' })
     $tray.Icon = $(if ($script:paused) { $icoOff } else { $icoOn })
     "$(Get-Date -Format s) paused=$($script:paused)" | Out-File -Append -Encoding utf8 $log
@@ -306,6 +345,7 @@ function Update-Tip {
 }
 Update-Tip
 $tipTimer = [Diagnostics.Stopwatch]::StartNew()
+$updSw = [Diagnostics.Stopwatch]::StartNew(); $script:nextCheckMin = 1; $script:notifiedVer = ''; $script:manualCheck = $false
 $script:tick = 0
 
 # ---- 主迴圈：有封包就處理，沒有就讓小圖示的選單有機會回應（Poll 一收到封包就會返回，不會多延遲）----
@@ -322,7 +362,8 @@ try {
                     # 每把配對碼各算一個證明（逗號分隔）：手機拿自己那把對得上任何一個，就知道是這台、而且這台認得它
                     $proofs = (@($script:phones.Values | ForEach-Object { Get-Hmac $_ "$($p[1])|$pcId" }) -join ',')
                     # 第 5 欄：主螢幕寬x高（手機的繪圖板照這個比例畫；只要比例，DPI 縮放不影響）
-                    $r = [Text.Encoding]::UTF8.GetBytes("LMH|$pcId|$env:COMPUTERNAME|$nm|$($script:monList)|$proofs")
+                    # 第 7 欄：電腦端版本（手機比對，誰舊誰提示更新）
+                    $r = [Text.Encoding]::UTF8.GetBytes("LMH|$pcId|$env:COMPUTERNAME|$nm|$($script:monList)|$proofs|$($script:myVer)")
                     $null = $udp.Send($r, $r.Length, $ep)
                     continue
                 }
@@ -361,6 +402,23 @@ try {
                         }
                         'w' { if (-not $script:paused) { [PadbridgeInput]::Wheel([int]$p[3]); $script:lastPkt = Get-Date; $ph.lastPkt = $script:lastPkt } }
                         'b' { if (-not $script:paused) { [PadbridgeInput]::Button([int]$p[3], $p[4] -eq '1'); $script:lastPkt = Get-Date; $ph.lastPkt = $script:lastPkt } }
+                        'x' {   # 鍵盤（加密）：K|按著的鍵 或 t|文字
+                            if ($script:paused -or $p.Length -lt 5) { break }
+                            if (-not $ph.keyEnc) { $ph.keyEnc = [PadbridgeKeys]::DeriveKey($ph.token) }
+                            $inner = [PadbridgeKeys]::Open($ph.keyEnc, $p[3])
+                            if ($inner -and $inner.StartsWith('K|')) {
+                                [int[]]$vks = @($inner.Substring(2).Split(',') | Where-Object { $_ -match '^\d{1,3}$' } | ForEach-Object { [int]$_ })
+                                [PadbridgeKeys]::SetState($vks)
+                            } elseif ($inner -and $inner.StartsWith('t|')) { [PadbridgeKeys]::Type($inner.Substring(2)) }
+                            $script:lastPkt = Get-Date; $ph.lastPkt = $script:lastPkt
+                        }
+                        'u' {   # 手機叫我更新（使用者在手機上按了）：從發這包的那支手機下載，背景驗簽
+                            if ($p.Length -ge 6 -and $p[3] -match '^\d{2,5}$' -and $p[4] -match '^[0-9a-f]{16,64}$') {
+                                $base = "http://$($ep.Address):$($p[3])/$($p[4])"
+                                [PadbridgeUpdate]::FetchAsync("$base/zip", "$base/sig", $script:myVer)
+                                "$(Get-Date -Format s) update requested by phone $($ph.id)" | Out-File -Append -Encoding utf8 $log
+                            }
+                        }
                         's' {   # 手機回報名稱（s|wifi|名稱；第二欄是舊版的模式欄）
                             $script:phoneMode = $p[3]; $ph.mode = $p[3]
                             if ($p.Length -ge 6 -and $p[4] -and $p[4] -ne $ph.name) { Save-PhoneField $ph 'name' $p[4] }
@@ -371,12 +429,36 @@ try {
             }
         }
         [System.Windows.Forms.Application]::DoEvents()
+        [PadbridgeKeys]::Tick()   # 連發、超時放開
+        if ([PadbridgeUpdate]::ReadyDir) {   # 新版下載、驗簽、解壓好了：換檔、重啟
+            $rd = [PadbridgeUpdate]::ReadyDir; $rv = [PadbridgeUpdate]::ReadyVer; [PadbridgeUpdate]::ReadyDir = ''
+            [PadbridgeKeys]::ReleaseAll(); foreach ($b in 1, 2, 4) { [PadbridgeInput]::Button($b, $false) }
+            Apply-Update $rd $rv
+            continue
+        }
+        if ([PadbridgeUpdate]::Error) {
+            "$(Get-Date -Format s) update failed: $([PadbridgeUpdate]::Error)" | Out-File -Append -Encoding utf8 $log
+            $tray.ShowBalloonTip(6000, 'Padbridge 更新沒成功', [PadbridgeUpdate]::Error, 'Warning'); [PadbridgeUpdate]::Error = ''
+        }
+        # 每天看一次 GitHub（開機 1 分鐘後第一次）；有新版只提示一次，按圖示選單的「更新到…」才更新
+        if ($updSw.Elapsed.TotalMinutes -ge $script:nextCheckMin) {
+            $script:nextCheckMin = $updSw.Elapsed.TotalMinutes + 1440
+            if (-not (Test-Path $noCheckFile)) { [PadbridgeUpdate]::CheckGithubAsync() }
+        }
+        $lv = [PadbridgeUpdate]::LatestVer
+        if ($lv -and $lv -ne $script:notifiedVer) {
+            $script:notifiedVer = $lv
+            if ([PadbridgeUpdate]::Compare($lv, $script:myVer) -gt 0) { $tray.ShowBalloonTip(8000, "Padbridge 有新版 $lv", '右鍵點右下角的月亮圖示 →「更新到…」；或在手機 App 上按更新。', 'Info') }
+            elseif ($script:manualCheck) { $tray.ShowBalloonTip(4000, 'Padbridge', "已經是最新版（$($script:myVer)）", 'Info') }
+            $script:manualCheck = $false
+        }
         if ($tipTimer.ElapsedMilliseconds -gt 1000) {
             Update-Tip; $tipTimer.Restart()
             if ((++$script:tick % 10) -eq 0) { Load-Phones; Update-Monitors }   # 螢幕插拔、改解析度也跟得上   # 安裝檔新加的手機（phone-*.token）不用重開也認得
         }
     }
 } finally {
+    try { [PadbridgeKeys]::ReleaseAll() } catch { }
     "$(Get-Date -Format s) exit" | Out-File -Append -Encoding utf8 $log
     $tray.Visible = $false
     $tray.Dispose()

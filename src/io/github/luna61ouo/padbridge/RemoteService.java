@@ -142,7 +142,7 @@ public class RemoteService extends AccessibilityService {
             StringBuilder proofs = new StringBuilder();
             for (String t : tokens().values()) { if (proofs.length() > 0) proofs.append(','); proofs.append(PcList.hmac(t, f[1] + "|" + pcId)); }
             String name = sp.getString("name", "").replace("|", " ");
-            String reply = "LMH|" + pcId + "|" + android.os.Build.MODEL.replace("|", " ") + "|" + name + "|" + scrW + "x" + scrH + "@0,0*|" + proofs;
+            String reply = "LMH|" + pcId + "|" + android.os.Build.MODEL.replace("|", " ") + "|" + name + "|" + scrW + "x" + scrH + "@0,0*|" + proofs + "|a" + Updates.myVersion(this);   // 第 7 欄 a＝Android 被控端（跟著 App 更新，不走電腦端更新）
             byte[] b = reply.getBytes(StandardCharsets.UTF_8);
             s.send(new DatagramPacket(b, b.length, p.getAddress(), p.getPort()));
             return;

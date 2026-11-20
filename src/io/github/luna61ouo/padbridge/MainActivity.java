@@ -54,7 +54,18 @@ public class MainActivity extends Activity {
         getSharedPreferences("mouse", MODE_PRIVATE).edit().putBoolean("tabletLandscape", on).apply();
         buildUi();
     }
+    // 鍵盤模組：""＝不在鍵盤、"type"＝手機打字、"pc"＝電腦鍵盤（固定橫放）
+    private String kbMode() { return getSharedPreferences("mouse", MODE_PRIVATE).getString("kbMode", ""); }
+    private void setKbMode(String m) {
+        if (pcKb != null) { pcKb.releaseAll(); pcKb = null; }
+        hub.releaseKeys();
+        getSharedPreferences("mouse", MODE_PRIVATE).edit().putString("kbMode", m).apply();
+        buildUi();
+    }
+    private Keyboards.PcKeyboard pcKb;
     private void buildUi() {
+        String kb = kbMode();
+        if (!kb.isEmpty()) { buildKeyboard(kb); refresh(hub.statusText()); return; }
         boolean land = tabletMode() && tabletLandscape();
         setRequestedOrientation(land ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                      : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
@@ -122,7 +133,112 @@ public class MainActivity extends Activity {
         showTabletPress();
     }
 
+    // ---------- 鍵盤模組 ----------
+    private void buildKeyboard(String kb) {
+        boolean pc = "pc".equals(kb);
+        setRequestedOrientation(pc ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                   : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        final LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(0xFF15121C);
+        final int p = dp(pc ? 6 : 12);
+        root.setOnApplyWindowInsetsListener((v, in) -> {
+            int types = android.view.WindowInsets.Type.displayCutout() | android.view.WindowInsets.Type.ime()
+                    | (pc ? 0 : android.view.WindowInsets.Type.systemBars());
+            android.graphics.Insets bars = in.getInsets(types);
+            v.setPadding(p + bars.left, (pc ? dp(4) : dp(8)) + bars.top, p + bars.right, (pc ? dp(4) : dp(8)) + bars.bottom);
+            return android.view.WindowInsets.CONSUMED;
+        });
+        status = new TextView(this);
+        status.setTextColor(0xFF9A8FB0);
+        status.setTextSize(pc ? 11 : 14);
+        status.setSingleLine(true);
+        LinearLayout top = row();
+        top.addView(btn("← 觸控板", v -> setKbMode("")), weight());
+        top.addView(btn(pc ? "手機打字" : "電腦鍵盤", v -> setKbMode(pc ? "type" : "pc")), weight());
+        actA = btn("", v -> pcDialog());
+        actA.setSingleLine(true);
+        actA.setTextSize(pc ? 11 : 13);
+        if (pc) {
+            pcKb = new Keyboards.PcKeyboard(this, hub);
+            final Button lock = btn("🔒 鎖", v -> pcKb.toggleLockArm());
+            pcKb.setLockListener(armed -> lock.setText(armed ? "點一顆鍵…（取消）" : "🔒 鎖"));
+            top.addView(lock, weight());
+            top.addView(actA, new LinearLayout.LayoutParams(0, -1, 1.6f));
+            status.setPadding(dp(8), 0, 0, 0);
+            top.addView(status, new LinearLayout.LayoutParams(0, -1, 1.6f));
+            status.setGravity(Gravity.CENTER_VERTICAL);
+            root.addView(top, new LinearLayout.LayoutParams(-1, dp(38)));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 0, 1f);
+            lp.topMargin = dp(4);
+            root.addView(pcKb, lp);
+        } else {
+            root.addView(status);
+            top.addView(actA, new LinearLayout.LayoutParams(0, -2, 1.6f));
+            root.addView(top);
+            final Keyboards.TypeCapture cap = new Keyboards.TypeCapture(this, hub);
+            LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, dp(56));
+            cl.topMargin = dp(8);
+            root.addView(cap, cl);
+            // 常用的特殊鍵（按住會連發，例如按住 ⌫）
+            String[] lb = {"Esc", "Tab", "←", "↑", "↓", "→", "Del", "⌫", "Enter"};
+            int[] vk = {Keyboards.VK_ESC, Keyboards.VK_TAB, Keyboards.VK_LEFT, Keyboards.VK_UP, Keyboards.VK_DOWN, Keyboards.VK_RIGHT, Keyboards.VK_DEL, Keyboards.VK_BACK, Keyboards.VK_ENTER};
+            LinearLayout keys = row();
+            for (int i = 0; i < lb.length; i++) {
+                Button b = keyBtn(lb[i], vk[i]);
+                keys.addView(b, new LinearLayout.LayoutParams(0, -1, i == lb.length - 1 ? 1.5f : 1f));
+            }
+            LinearLayout.LayoutParams kl = new LinearLayout.LayoutParams(-1, dp(48));
+            kl.topMargin = dp(6);
+            root.addView(keys, kl);
+            // 小觸控板：打字中要點別的地方、移游標，不用切回觸控板
+            Touchpad tp = new Touchpad(this);
+            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, 0, 1f);
+            tl.topMargin = dp(8);
+            root.addView(tp, tl);
+            LinearLayout btnRow = row();
+            btnRow.addView(holdBtn("左鍵", MouseHub.BTN_LEFT), weight());
+            btnRow.addView(holdBtn("右鍵", MouseHub.BTN_RIGHT), weight());
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, dp(52));
+            bl.topMargin = dp(6);
+            root.addView(btnRow, bl);
+            ui.postDelayed(cap::showIme, 250);
+        }
+        setContentView(root);
+        android.view.WindowInsetsController wic = getWindow().getInsetsController();
+        if (wic != null) {
+            if (pc) {
+                wic.hide(android.view.WindowInsets.Type.systemBars());
+                wic.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            } else wic.show(android.view.WindowInsets.Type.systemBars());
+        }
+    }
+
+    /** 一顆電腦鍵（按住＝按住，電腦那邊會連發）。 */
+    private Button keyBtn(String t, final int vk) {
+        Button b = new Button(this);
+        b.setText(t);
+        b.setAllCaps(false);
+        b.setTextSize(13);
+        b.setPadding(0, 0, 0, 0);
+        b.setMinWidth(0); b.setMinimumWidth(0);
+        b.setOnTouchListener((v, e) -> {
+            int a = e.getActionMasked();
+            if (a == MotionEvent.ACTION_DOWN) {
+                v.setPressed(true);
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                hub.setKeys(java.util.Collections.singletonList(vk));
+            } else if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
+                v.setPressed(false);
+                hub.releaseKeys();
+            }
+            return true;
+        });
+        return b;
+    }
+
     @Override public void onBackPressed() {
+        if (!kbMode().isEmpty()) { setKbMode(""); return; }
         if (tabletMode()) { setTabletMode(false); return; }
         super.onBackPressed();
     }
@@ -306,10 +422,22 @@ public class MainActivity extends Activity {
         actA = btn("", v -> pcDialog());
         actB = btn("⚙ 設定", v -> settingsDialog());
         Button tab = btn("繪圖板", v -> setTabletMode(true));
+        Button kbd = btn("鍵盤", v -> setKbMode("type"));
         topRow.addView(actA, new LinearLayout.LayoutParams(0, -2, 2f));
         topRow.addView(tab, new LinearLayout.LayoutParams(0, -2, 1f));
+        topRow.addView(kbd, new LinearLayout.LayoutParams(0, -2, 1f));
         topRow.addView(actB, new LinearLayout.LayoutParams(0, -2, 0.9f));
         root.addView(topRow);
+
+        // 更新提示（誰舊誰提示；平常藏起來）
+        updBanner = btn("", v -> onUpdateBanner());
+        updBanner.setTextSize(13);
+        updBanner.setBackgroundColor(0xFF4A3F6E);
+        updBanner.setTextColor(0xFFFFE6A8);
+        updBanner.setVisibility(View.GONE);
+        LinearLayout.LayoutParams ul = new LinearLayout.LayoutParams(-1, -2);
+        ul.topMargin = dp(8);
+        root.addView(updBanner, ul);
 
         Touchpad pad = new Touchpad(this);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 0, 1f);
@@ -406,14 +534,57 @@ public class MainActivity extends Activity {
         super.onResume();
         hub.setListener(t -> ui.post(() -> refresh(t)));
         hub.tellPcMode();
+        // 回到 App：找一次電腦（拿到它的版本）、需要的話看一下 GitHub，然後更新提示
+        final boolean gh = hub.settings().on(MouseSettings.UPDATE_CHECK);
+        new Thread(() -> {
+            hub.pcs().discover();
+            if (gh) Updates.githubLatest(this, false);
+            ui.post(() -> refresh(hub.statusText()));
+        }).start();
     }
 
     @Override protected void onPause() {
         hub.setListener(null);
+        if (pcKb != null) pcKb.releaseAll(); else hub.releaseKeys();   // 離開畫面時不留按著的鍵
         super.onPause();
     }
 
+    // ---------- 更新提示 ----------
+    private Button updBanner;
+    private int updAction;   // 1＝電腦端太舊要手動、2＝推電腦端更新、3＝App 有新版
+    private String updVer = "";
+    private void showUpdateBanner() {
+        if (updBanner == null) return;
+        String my = Updates.myVersion(this);
+        PcList.Pc sel = hub.pcs().selected();
+        boolean win = sel != null && sel.online && !sel.ver.startsWith("a");
+        String gh = getSharedPreferences("mouse", MODE_PRIVATE).getString("ghLatest", "");
+        String newer = gh;
+        if (win && Updates.cmp(sel.ver, newer) > 0) newer = sel.ver;
+        updAction = 0;
+        if (win && sel.ver.isEmpty()) { updAction = 1; updBanner.setText("這台電腦的 Padbridge 是舊版，不能自動更新：按這裡手動更新一次"); }
+        else if (win && Updates.cmp(sel.ver, my) < 0 && Updates.canPush(this)) { updAction = 2; updVer = my; updBanner.setText("電腦端 " + sel.ver + " 比手機舊：按這裡更新到 " + my); }
+        else if (Updates.cmp(newer, my) > 0) { updAction = 3; updVer = newer; updBanner.setText("手機 App 有新版 " + newer + "（目前 " + my + "）：按這裡到 GitHub 下載"); }
+        updBanner.setVisibility(updAction == 0 ? View.GONE : View.VISIBLE);
+    }
+    private void onUpdateBanner() {
+        if (updAction == 1) setupDialog();
+        else if (updAction == 3) startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(SetupServer.RELEASES_URL)));
+        else if (updAction == 2) {
+            final PcList.Pc sel = hub.pcs().selected();
+            new AlertDialog.Builder(this).setTitle("更新電腦端")
+                    .setMessage("把「" + (sel == null ? "電腦" : sel.label()) + "」的 Padbridge 更新到 " + updVer + "？\n\n電腦會先檢查發布簽名才安裝，接收程式重啟幾秒，這段時間滑鼠會停一下。")
+                    .setPositiveButton("更新", (d, w) -> new Thread(() -> {
+                        boolean ok = hub.pushUpdate();
+                        ui.post(() -> new AlertDialog.Builder(this).setMessage(ok ? "已送出。電腦下載、驗證後會自己重啟，大約 10 秒。" : "送不出去：這版 App 沒有帶發布簽名，或開不了下載。").setPositiveButton("好", null).show());
+                        if (ok) { try { Thread.sleep(12000); } catch (InterruptedException ignored) {} hub.pcs().discover(); ui.post(() -> refresh(hub.statusText())); }
+                    }).start())
+                    .setNegativeButton("取消", null).show();
+        }
+    }
+
     private void refresh(String text) {
+        showUpdateBanner();
         if (status == null || actA == null) return;
         status.setText(text);
         if (tabletMode()) { showTabletPress(); if (pad != null) pad.invalidate(); }   // 找到電腦後螢幕清單／比例可能變了
@@ -683,15 +854,24 @@ public class MainActivity extends Activity {
     /**
      * 觸控板：單指滑＝移動、單點＝左鍵、雙指點＝右鍵、雙指上下滑＝捲動、
      * 單指按住不動 0.45 秒＝按住左鍵（拖曳），放開手指就放開。
+     * 點一下後 TAP_WINDOW 內再碰並滑動＝拖曳（點後拖）；所以單點的左鍵要等這段時間過了才送。
+     * 這段時間內再點一下（沒滑）＝雙擊，兩下一起送。
      */
     class Touchpad extends View {
+        private static final long TAP_WINDOW = 250;
         private final Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG), txt = new Paint(Paint.ANTI_ALIAS_FLAG);
         private float lastX, lastY, startX, startY, remX, remY, scrollAcc, lastAvgY;
         private long downAt;
-        private int maxPtr;
+        private int maxPtr, holdX, holdY;
         private boolean moved, dragging;
+        private boolean tapPending;   // 上一下單點的左鍵還沒送，等看看會不會變成點後拖
+        private boolean second;       // 這次觸碰是在單點後的等待時間內開始的
+        private final Runnable flushTap = () -> {
+            if (tapPending) { tapPending = false; hub.click(MouseHub.BTN_LEFT); }
+        };
         private final Runnable longPress = () -> {
             if (!moved && maxPtr == 1) {
+                second = false; tapPending = false;   // 點一下再按住不動也是拖曳，前一下不另外點
                 dragging = true;
                 performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                 hub.button(MouseHub.BTN_LEFT, true);
@@ -711,7 +891,12 @@ public class MainActivity extends Activity {
             float cx = getWidth() / 2f, cy = getHeight() / 2f;
             c.drawText("單指滑＝移動　點一下＝左鍵", cx, cy - dp(22), txt);
             c.drawText("雙指點＝右鍵　雙指上下滑＝捲動", cx, cy, txt);
-            c.drawText("按住不動一下再滑＝拖曳", cx, cy + dp(22), txt);
+            c.drawText("點一下再按住滑／按住不動一下再滑＝拖曳", cx, cy + dp(22), txt);
+        }
+
+        /** 單點後的第二下不是點後拖（多了一指）：前一下照常當左鍵送出。 */
+        private void giveUpSecond() {
+            if (second) { second = false; flushTap.run(); }
         }
 
         @Override public boolean onTouchEvent(MotionEvent e) {
@@ -719,9 +904,11 @@ public class MainActivity extends Activity {
                 case MotionEvent.ACTION_DOWN:
                     // 不等畫面更新才批次交付，觸控事件用感測器原本的頻率送進來，移動更連續
                     if (android.os.Build.VERSION.SDK_INT >= 30) requestUnbufferedDispatch(e);
+                    removeCallbacks(flushTap);
+                    second = tapPending;   // 前一下單點還在等 ⇒ 這次可能是點後拖或雙擊
                     downAt = e.getEventTime();
                     startX = lastX = e.getX(); startY = lastY = e.getY();
-                    remX = remY = 0; scrollAcc = 0;
+                    remX = remY = 0; scrollAcc = 0; holdX = holdY = 0;
                     maxPtr = 1; moved = false; dragging = false;
                     hub.setActive(true);
                     postDelayed(longPress, 450);
@@ -730,6 +917,8 @@ public class MainActivity extends Activity {
                     maxPtr = Math.max(maxPtr, e.getPointerCount());
                     lastAvgY = avgY(e);
                     removeCallbacks(longPress);
+                    giveUpSecond();
+                    if (holdX != 0 || holdY != 0) { hub.move(holdX, holdY); holdX = holdY = 0; }
                     break;
                 case MotionEvent.ACTION_MOVE:
                     if (e.getPointerCount() >= 2) {
@@ -743,16 +932,25 @@ public class MainActivity extends Activity {
                         float x = e.getX(), y = e.getY();
                         float dx = x - lastX, dy = y - lastY;
                         lastX = x; lastY = y;
-                        if (Math.hypot(x - startX, y - startY) > dp(6)) {
-                            if (!moved) removeCallbacks(longPress);
-                            moved = true;
-                        }
                         // 線性、不自己加速：Windows 本身已經有指標加速，兩層疊在一起會忽快忽慢
                         float gain = hub.sensitivity();
                         remX += dx * gain; remY += dy * gain;
                         int ix = (int) remX, iy = (int) remY;
                         remX -= ix; remY -= iy;
-                        hub.move(ix, iy);
+                        if (!moved && Math.hypot(x - startX, y - startY) > dp(6)) {
+                            removeCallbacks(longPress);
+                            moved = true;
+                            if (second) {
+                                // 點後拖：先在原地按下左鍵，再把剛才暫存的位移補上，物件才抓得到
+                                second = false; tapPending = false;
+                                dragging = true;
+                                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                                hub.button(MouseHub.BTN_LEFT, true);
+                            }
+                            ix += holdX; iy += holdY; holdX = holdY = 0;
+                        }
+                        if (second && !moved) { holdX += ix; holdY += iy; }   // 還沒判定前先不動游標
+                        else hub.move(ix, iy);
                     }
                     break;
                 case MotionEvent.ACTION_POINTER_UP:
@@ -765,15 +963,30 @@ public class MainActivity extends Activity {
                     removeCallbacks(longPress);
                     hub.setActive(false);
                     long dur = e.getEventTime() - downAt;
+                    boolean up = e.getActionMasked() == MotionEvent.ACTION_UP;
                     if (dragging) {
                         hub.button(MouseHub.BTN_LEFT, false);
-                    } else if (!moved && dur < 280 && e.getActionMasked() == MotionEvent.ACTION_UP) {
-                        hub.click(maxPtr >= 2 ? MouseHub.BTN_RIGHT : MouseHub.BTN_LEFT);
+                    } else if (second) {
+                        // 第二下沒滑：短點＝雙擊（兩下一起送），否則只送前一下
+                        second = false; tapPending = false;
+                        hub.click(MouseHub.BTN_LEFT);
+                        if (up && !moved && dur < 280) hub.click(MouseHub.BTN_LEFT);
+                    } else if (!moved && dur < 280 && up) {
+                        if (maxPtr >= 2) hub.click(MouseHub.BTN_RIGHT);
+                        else { tapPending = true; postDelayed(flushTap, TAP_WINDOW); }
                     }
+                    if (holdX != 0 || holdY != 0) { hub.move(holdX, holdY); holdX = holdY = 0; }
                     dragging = false;
                     break;
             }
             return true;
+        }
+
+        @Override protected void onDetachedFromWindow() {
+            super.onDetachedFromWindow();
+            removeCallbacks(longPress);
+            removeCallbacks(flushTap);
+            flushTap.run();
         }
 
         private float avgY(MotionEvent e) {

@@ -240,6 +240,84 @@ public final class MouseHub {
 
     public void click(int btn) { button(btn, true); button(btn, false); }
 
+    // ---------- 鍵盤（11-20）----------
+    // 鍵盤打的可能是密碼、訊息：內容一律加密，同網路的人只看得到「有封包」。
+    //   外層照舊 v2 簽章＋流水號（防偽造、防重播）：x|base64(IV 16＋AES-256-CBC 密文)
+    //   內層：K|vk,vk,…（現在按著的鍵，完整清單）／t|文字（手機輸入法打好的字）
+    // 按鍵送「狀態」不送「事件」：掉一包下一包就更正；按著鍵時每 300ms 重送一次當心跳，
+    // 電腦 1 秒沒收到就全部放開（不會卡 Ctrl）。連發由電腦那邊模擬。
+    private String kTok; private byte[] kEnc;
+    private void sendSecret(String inner) {
+        String tok = wifiToken();
+        if (tok.isEmpty()) return;
+        try {
+            if (!tok.equals(kTok)) {
+                javax.crypto.Mac m = javax.crypto.Mac.getInstance("HmacSHA256");
+                m.init(new javax.crypto.spec.SecretKeySpec(tok.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+                kEnc = m.doFinal("padbridge-key-enc".getBytes(StandardCharsets.UTF_8));
+                kTok = tok;
+            }
+            byte[] iv = new byte[16];
+            new java.security.SecureRandom().nextBytes(iv);
+            javax.crypto.Cipher c = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
+            c.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(kEnc, "AES"), new javax.crypto.spec.IvParameterSpec(iv));
+            byte[] ct = c.doFinal(inner.getBytes(StandardCharsets.UTF_8));
+            byte[] all = new byte[16 + ct.length];
+            System.arraycopy(iv, 0, all, 0, 16); System.arraycopy(ct, 0, all, 16, ct.length);
+            sendWifi("x|" + android.util.Base64.encodeToString(all, android.util.Base64.NO_WRAP));
+        } catch (Exception e) { Log.w(TAG, "secret " + e); }
+    }
+
+    private final java.util.TreeSet<Integer> keysHeld = new java.util.TreeSet<>();
+    private final Runnable keyBeat = new Runnable() { @Override public void run() {
+        synchronized (keysHeld) { if (keysHeld.isEmpty()) return; }
+        sendKeyState(); lockHandler.postDelayed(this, 300);
+    } };
+    /** 把「現在按著哪些鍵」整份換掉（Windows 虛擬鍵碼）。空集合＝全部放開。 */
+    public void setKeys(java.util.Collection<Integer> vks) {
+        synchronized (keysHeld) {
+            if (keysHeld.size() == vks.size() && keysHeld.containsAll(vks)) return;
+            keysHeld.clear(); keysHeld.addAll(vks);
+        }
+        holdWifiLowLatency();
+        sendKeyState();
+        lockHandler.removeCallbacks(keyBeat);
+        lockHandler.postDelayed(keyBeat, 300);
+    }
+    public void releaseKeys() { setKeys(java.util.Collections.<Integer>emptyList()); }
+    private void sendKeyState() {
+        StringBuilder b = new StringBuilder("K|");
+        synchronized (keysHeld) { for (int v : keysHeld) { if (b.length() > 2) b.append(','); b.append(v); } }
+        sendSecret(b.toString());
+    }
+    /** 一段打好的字（手機輸入法選定的）；電腦用 Unicode 直接打出來，不經電腦的輸入法。 */
+    public void typeText(String s) {
+        if (s == null || s.isEmpty()) return;
+        holdWifiLowLatency();
+        for (int i = 0; i < s.length(); ) {
+            int e = Math.min(s.length(), i + 400);
+            if (e < s.length() && Character.isHighSurrogate(s.charAt(e - 1))) e--;   // 別把一個表情符號切成兩半
+            sendSecret("t|" + s.substring(i, e)); i = e;
+        }
+    }
+    /** 叫選中的電腦更新到手機 App 帶的版本（背景執行緒呼叫）。回傳 false＝這版 App 沒有發布簽名、或開不了下載點。 */
+    public boolean pushUpdate() {
+        PcList.Pc p = pcList.selected();
+        if (p == null || p.ip.isEmpty() || !Updates.canPush(ctx)) return false;
+        byte[] r = new byte[16]; new java.security.SecureRandom().nextBytes(r);
+        StringBuilder path = new StringBuilder(); for (byte b : r) path.append(String.format("%02x", b));
+        int port = Updates.serveOnce(ctx, p.ip, path.toString());
+        if (port < 0) return false;
+        sendWifi("u|" + port + "|" + path);
+        return true;
+    }
+
+    /** 點一下某顆鍵（按下＋放開）。 */
+    public void tapKey(int vk) {
+        setKeys(java.util.Collections.singletonList(vk));
+        releaseKeys();
+    }
+
     // ---------- 繪圖板（絕對座標）----------
     // 多螢幕：電腦有回報螢幕清單才帶螢幕編號（舊電腦端不認得多出來的欄位，也不會帶錯）
     private String monSuffix() {

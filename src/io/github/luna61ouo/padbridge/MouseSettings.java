@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
  */
 public final class MouseSettings {
     public static final String WIFI_LOW_LATENCY = "wifiLowLatency";
+    public static final String UPDATE_CHECK = "updateCheck";
     public static final String TABLET_PRESS = "tabletPress";   // 繪圖板：true＝自動左鍵、false＝按鍵觸發（畫面上切，不放設定頁）
 
     public static final class Toggle {
@@ -19,6 +20,8 @@ public final class MouseSettings {
     public static final Toggle[] ALL = {
         new Toggle(WIFI_LOW_LATENCY, "Wi-Fi 低延遲",
                 "用觸控板時讓手機的 Wi-Fi 不進省電，游標比較不會一頓一頓。停手 5 秒恢復省電。", true),
+        new Toggle(UPDATE_CHECK, "每天檢查 App 新版",
+                "每天看一次 GitHub 有沒有新版 App，有的話在觸控板上方提示。關掉也照樣會跟電腦比對版本。", true),
     };
 
     private final SharedPreferences p;
