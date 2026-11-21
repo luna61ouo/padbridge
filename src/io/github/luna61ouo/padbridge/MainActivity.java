@@ -54,8 +54,14 @@ public class MainActivity extends Activity {
         getSharedPreferences("mouse", MODE_PRIVATE).edit().putBoolean("tabletLandscape", on).apply();
         buildUi();
     }
-    // 鍵盤模組：""＝不在鍵盤、"type"＝手機打字、"pc"＝電腦鍵盤（固定橫放）
-    private String kbMode() { return getSharedPreferences("mouse", MODE_PRIVATE).getString("kbMode", ""); }
+    // 鍵盤模組：""＝不在鍵盤、"pc"＝電腦鍵盤（固定橫放）。手機打字 11-21 併進觸控板（⌨／三指點），舊的 "type" 當成觸控板。
+    private String kbMode() { String m = getSharedPreferences("mouse", MODE_PRIVATE).getString("kbMode", ""); return "pc".equals(m) ? m : ""; }
+    // 觸控板全螢幕（簡報用）：整個畫面只剩觸控板，音量鍵翻頁，返回鍵離開
+    private boolean padFull() { return getSharedPreferences("mouse", MODE_PRIVATE).getBoolean("padFull", false); }
+    private void setPadFull(boolean on) {
+        getSharedPreferences("mouse", MODE_PRIVATE).edit().putBoolean("padFull", on).apply();
+        buildUi();
+    }
     private void setKbMode(String m) {
         if (pcKb != null) { pcKb.releaseAll(); pcKb = null; }
         hub.releaseKeys();
@@ -73,7 +79,7 @@ public class MainActivity extends Activity {
         // 系統列控制器要在 setContentView 之後才拿得到（之前 DecorView 還沒建，會 NPE）
         android.view.WindowInsetsController wic = getWindow().getInsetsController();
         if (wic != null) {
-            if (land) {   // 橫放：全螢幕，畫布越大越好；從邊緣滑進來可以暫時叫出系統列
+            if (land || (!tabletMode() && padFull())) {   // 橫放／觸控板全螢幕：藏系統列，從邊緣滑進來可以暫時叫出
                 wic.hide(android.view.WindowInsets.Type.systemBars());
                 wic.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             } else wic.show(android.view.WindowInsets.Type.systemBars());
@@ -83,6 +89,7 @@ public class MainActivity extends Activity {
 
     // 橫放（要大畫布、寬螢幕用）：畫布佔左邊，右邊一欄放按鈕。手掌會在畫布上，用觸控筆比較適合。
     private void buildTabletLandscape() {
+        compactPc = false;
         final LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.HORIZONTAL);
         root.setBackgroundColor(0xFF15121C);
@@ -135,6 +142,7 @@ public class MainActivity extends Activity {
 
     // ---------- 鍵盤模組 ----------
     private void buildKeyboard(String kb) {
+        compactPc = false;
         boolean pc = "pc".equals(kb);
         setRequestedOrientation(pc ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                    : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
@@ -155,7 +163,6 @@ public class MainActivity extends Activity {
         status.setSingleLine(true);
         LinearLayout top = row();
         top.addView(btn("← 觸控板", v -> setKbMode("")), weight());
-        top.addView(btn(pc ? "手機打字" : "電腦鍵盤", v -> setKbMode(pc ? "type" : "pc")), weight());
         actA = btn("", v -> pcDialog());
         actA.setSingleLine(true);
         actA.setTextSize(pc ? 11 : 13);
@@ -172,37 +179,6 @@ public class MainActivity extends Activity {
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 0, 1f);
             lp.topMargin = dp(4);
             root.addView(pcKb, lp);
-        } else {
-            root.addView(status);
-            top.addView(actA, new LinearLayout.LayoutParams(0, -2, 1.6f));
-            root.addView(top);
-            final Keyboards.TypeCapture cap = new Keyboards.TypeCapture(this, hub);
-            LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, dp(56));
-            cl.topMargin = dp(8);
-            root.addView(cap, cl);
-            // 常用的特殊鍵（按住會連發，例如按住 ⌫）
-            String[] lb = {"Esc", "Tab", "←", "↑", "↓", "→", "Del", "⌫", "Enter"};
-            int[] vk = {Keyboards.VK_ESC, Keyboards.VK_TAB, Keyboards.VK_LEFT, Keyboards.VK_UP, Keyboards.VK_DOWN, Keyboards.VK_RIGHT, Keyboards.VK_DEL, Keyboards.VK_BACK, Keyboards.VK_ENTER};
-            LinearLayout keys = row();
-            for (int i = 0; i < lb.length; i++) {
-                Button b = keyBtn(lb[i], vk[i]);
-                keys.addView(b, new LinearLayout.LayoutParams(0, -1, i == lb.length - 1 ? 1.5f : 1f));
-            }
-            LinearLayout.LayoutParams kl = new LinearLayout.LayoutParams(-1, dp(48));
-            kl.topMargin = dp(6);
-            root.addView(keys, kl);
-            // 小觸控板：打字中要點別的地方、移游標，不用切回觸控板
-            Touchpad tp = new Touchpad(this);
-            LinearLayout.LayoutParams tl = new LinearLayout.LayoutParams(-1, 0, 1f);
-            tl.topMargin = dp(8);
-            root.addView(tp, tl);
-            LinearLayout btnRow = row();
-            btnRow.addView(holdBtn("左鍵", MouseHub.BTN_LEFT), weight());
-            btnRow.addView(holdBtn("右鍵", MouseHub.BTN_RIGHT), weight());
-            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, dp(52));
-            bl.topMargin = dp(6);
-            root.addView(btnRow, bl);
-            ui.postDelayed(cap::showIme, 250);
         }
         setContentView(root);
         android.view.WindowInsetsController wic = getWindow().getInsetsController();
@@ -240,12 +216,15 @@ public class MainActivity extends Activity {
     @Override public void onBackPressed() {
         if (!kbMode().isEmpty()) { setKbMode(""); return; }
         if (tabletMode()) { setTabletMode(false); return; }
+        if (padFull()) { setPadFull(false); return; }
+        if (typeBox != null && typeBox.getVisibility() == View.VISIBLE) { setTyping(false); return; }
         super.onBackPressed();
     }
 
     // 繪圖板（直放）：上面畫布、中間模式切換、下面大左鍵／右鍵。手放在手機下方的桌面上，不會壓到螢幕。
     private Button modeAuto, modeKey;
     private void buildTablet() {
+        compactPc = false;
         final LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(0xFF15121C);
@@ -255,35 +234,28 @@ public class MainActivity extends Activity {
             v.setPadding(p + bars.left, dp(8) + bars.top, p + bars.right, dp(12) + bars.bottom);
             return android.view.WindowInsets.CONSUMED;
         });
-        status = new TextView(this);
-        status.setTextColor(0xFFE8DDF5);
-        status.setTextSize(15);
-        status.setPadding(0, 0, 0, dp(8));
-        root.addView(status);
-        LinearLayout bar = row();
-        actA = btn("", v -> pcDialog());
-        bar.addView(btn("← 觸控板", v -> setTabletMode(false)), new LinearLayout.LayoutParams(0, -2, 1f));
-        bar.addView(actA, new LinearLayout.LayoutParams(0, -2, 1.6f));
-        bar.addView(btn("橫放", v -> setTabletLandscape(true)), new LinearLayout.LayoutParams(0, -2, 0.8f));
-        root.addView(bar);
+        connRow(root);
+        compactPc = true;
+        LinearLayout.LayoutParams tml = new LinearLayout.LayoutParams(-1, dp(44));
+        tml.topMargin = dp(4);
+        root.addView(modeBar(1), tml);
 
         LinearLayout modeRow = row();
         modeAuto = btn("自動左鍵", v -> setTabletPress(true));
         modeKey = btn("按鍵觸發", v -> setTabletPress(false));
-        modeRow.addView(modeAuto, weight());
-        modeRow.addView(modeKey, weight());
         previewBtn = btn("", v -> togglePreview());
-        modeRow.addView(previewBtn, weightSmall());
-        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(-1, dp(48));
-        mlp.topMargin = dp(8);
+        addGapped(modeRow, new View[]{modeAuto, modeKey, previewBtn}, new float[]{1f, 1f, 0.8f});
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(-1, dp(46));
+        mlp.topMargin = dp(10);
         root.addView(modeRow, mlp);
         LinearLayout row2 = row();
         monBtn = btn("", v -> monitorDialog());
         adjustBtn = btn("", v -> toggleAdjust());
         adjustBtn.setOnLongClickListener(v -> { if (pad != null) pad.resetPadArea(); return true; });
-        row2.addView(monBtn, weight());
-        row2.addView(adjustBtn, weight());
-        root.addView(row2, new LinearLayout.LayoutParams(-1, dp(48)));
+        addGapped(row2, new View[]{monBtn, adjustBtn, btn("橫放", v -> setTabletLandscape(true))}, new float[]{1f, 1f, 0.8f});
+        LinearLayout.LayoutParams r2l = new LinearLayout.LayoutParams(-1, dp(46));
+        r2l.topMargin = dp(6);
+        root.addView(row2, r2l);
         final TextView hint = new TextView(this);
         hint.setTextColor(0xFF9A8FB0);
         hint.setTextSize(13);
@@ -292,8 +264,7 @@ public class MainActivity extends Activity {
         root.addView(hint);
 
         LinearLayout btnRow = row();
-        btnRow.addView(holdBtn("左鍵", MouseHub.BTN_LEFT), new LinearLayout.LayoutParams(0, -1, 2f));
-        btnRow.addView(holdBtn("右鍵", MouseHub.BTN_RIGHT), weight());
+        addGapped(btnRow, new View[]{holdBtn("左鍵", MouseHub.BTN_LEFT), holdBtn("右鍵", MouseHub.BTN_RIGHT)}, new float[]{2f, 1f});
         root.addView(btnRow, new LinearLayout.LayoutParams(-1, dp(80)));
 
         // 畫布（照電腦比例、貼上緣），下面剩下的空間是手掌區：手放上去什麼都不會發生
@@ -359,7 +330,7 @@ public class MainActivity extends Activity {
     private void setTabletPress(boolean auto) { hub.settings().set(MouseSettings.TABLET_PRESS, auto); showTabletPress(); }
     private void showTabletPress() {
         boolean auto = hub.settings().on(MouseSettings.TABLET_PRESS);
-        if (modeAuto != null) { modeAuto.setAlpha(auto ? 1f : 0.45f); modeKey.setAlpha(auto ? 0.45f : 1f); }
+        if (modeAuto != null) { modeAuto.setSelected(auto); modeKey.setSelected(!auto); modeAuto.setAlpha(auto ? 1f : 0.6f); modeKey.setAlpha(auto ? 0.6f : 1f); }
         if (previewBtn != null) previewBtn.setText(previewOn() ? "預覽：開" : "預覽：關");
         if (adjustBtn != null) adjustBtn.setText(adjustingArea ? "完成" : "調整範圍");
         if (monBtn != null) {
@@ -382,16 +353,26 @@ public class MainActivity extends Activity {
 
     // 繪圖板模式下，音量鍵當滑鼠鍵（按住＝按住）：直放時大拇指按得到，按鍵觸發模式最順手。
     @Override public boolean onKeyDown(int code, android.view.KeyEvent e) {
+        int pg = slideVolumeKey(code);
+        if (pg != 0) { if (e.getRepeatCount() == 0) hub.tapKey(pg); return true; }
         int b = tabletVolumeButton(code);
         if (b == 0) return super.onKeyDown(code, e);
         if (e.getRepeatCount() == 0) { hub.setActive(true); hub.button(b, true); }
         return true;
     }
     @Override public boolean onKeyUp(int code, android.view.KeyEvent e) {
+        if (slideVolumeKey(code) != 0) return true;
         int b = tabletVolumeButton(code);
         if (b == 0) return super.onKeyUp(code, e);
         hub.button(b, false);
         return true;
+    }
+    // 觸控板全螢幕：音量鍵翻頁（跟簡報筆一樣送 PgDn／PgUp）
+    private int slideVolumeKey(int code) {
+        if (tabletMode() || !kbMode().isEmpty() || !padFull()) return 0;
+        if (code == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return 0x22;   // PgDn＝下一頁
+        if (code == android.view.KeyEvent.KEYCODE_VOLUME_UP) return 0x21;     // PgUp＝上一頁
+        return 0;
     }
     private int tabletVolumeButton(int code) {
         if (!tabletMode()) return 0;
@@ -400,34 +381,66 @@ public class MainActivity extends Activity {
         return 0;
     }
 
+    // 觸控板裡的打字區（⌨ 或三指點叫出）：輸入法＋常用特殊鍵，觸控板跟著縮到鍵盤上方
+    private LinearLayout typeBox;
+    private View speedBox;
+    private Keyboards.TypeCapture typeCap;
+    private boolean imeShown;
+    private void setTyping(boolean on) {
+        if (typeBox == null) return;
+        typeBox.setVisibility(on ? View.VISIBLE : View.GONE);
+        if (speedBox != null) speedBox.setVisibility(on ? View.GONE : View.VISIBLE);
+        if (typeBtn != null) typeBtn.setSelected(on);
+        if (on) ui.postDelayed(typeCap::showIme, 60);
+        else {
+            hub.releaseKeys();
+            android.view.WindowInsetsController wic = getWindow().getInsetsController();
+            if (wic != null) wic.hide(android.view.WindowInsets.Type.ime());
+            typeCap.clearFocus();
+        }
+    }
+    private void toggleTyping() { if (typeBox != null) setTyping(typeBox.getVisibility() != View.VISIBLE); }
+
+    private void buildTouchpadFull() {
+        compactPc = false; typeBtn = null;
+        typeBox = null; speedBox = null; typeCap = null; updBanner = null; status = null; actA = null; actB = null;
+        final LinearLayout root = new LinearLayout(this);
+        root.setBackgroundColor(0xFF15121C);
+        final int p = dp(6);
+        root.setOnApplyWindowInsetsListener((v, in) -> {
+            android.graphics.Insets bars = in.getInsets(android.view.WindowInsets.Type.displayCutout());
+            v.setPadding(p + bars.left, p + bars.top, p + bars.right, p + bars.bottom);
+            return android.view.WindowInsets.CONSUMED;
+        });
+        Touchpad pad = new Touchpad(this);
+        pad.full = true;
+        root.addView(pad, new LinearLayout.LayoutParams(-1, -1));
+        setContentView(root);
+    }
+
     private void buildTouchpad() {
+        if (padFull()) { buildTouchpadFull(); return; }
         final LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(0xFF15121C);
         final int p = dp(12);
         // Android 15 起畫面會畫到狀態列／導覽列底下（edge-to-edge），上下會擠到邊。照系統列實際高度留白。
+        // 輸入法也算進去：打字時整個畫面縮到鍵盤上方
         root.setOnApplyWindowInsetsListener((v, in) -> {
-            android.graphics.Insets bars = in.getInsets(android.view.WindowInsets.Type.systemBars() | android.view.WindowInsets.Type.displayCutout());
+            android.graphics.Insets bars = in.getInsets(android.view.WindowInsets.Type.systemBars() | android.view.WindowInsets.Type.displayCutout() | android.view.WindowInsets.Type.ime());
             v.setPadding(p + bars.left, dp(8) + bars.top, p + bars.right, dp(12) + bars.bottom);
+            // 使用者自己把輸入法收起來（下滑、返回）：打字區跟著收
+            boolean ime = in.isVisible(android.view.WindowInsets.Type.ime());
+            if (imeShown && !ime && typeBox != null && typeBox.getVisibility() == View.VISIBLE) ui.post(() -> setTyping(false));
+            imeShown = ime;
             return android.view.WindowInsets.CONSUMED;
         });
 
-        status = new TextView(this);
-        status.setTextColor(0xFFE8DDF5);
-        status.setTextSize(15);
-        status.setPadding(0, 0, 0, dp(8));
-        root.addView(status);
+        connRow(root);
 
-        LinearLayout topRow = row();
-        actA = btn("", v -> pcDialog());
-        actB = btn("⚙ 設定", v -> settingsDialog());
-        Button tab = btn("繪圖板", v -> setTabletMode(true));
-        Button kbd = btn("鍵盤", v -> setKbMode("type"));
-        topRow.addView(actA, new LinearLayout.LayoutParams(0, -2, 2f));
-        topRow.addView(tab, new LinearLayout.LayoutParams(0, -2, 1f));
-        topRow.addView(kbd, new LinearLayout.LayoutParams(0, -2, 1f));
-        topRow.addView(actB, new LinearLayout.LayoutParams(0, -2, 0.9f));
-        root.addView(topRow);
+        LinearLayout.LayoutParams ml = new LinearLayout.LayoutParams(-1, dp(44));
+        ml.topMargin = dp(4);
+        root.addView(modeBar(0), ml);
 
         // 更新提示（誰舊誰提示；平常藏起來）
         updBanner = btn("", v -> onUpdateBanner());
@@ -439,34 +452,143 @@ public class MainActivity extends Activity {
         ul.topMargin = dp(8);
         root.addView(updBanner, ul);
 
+        // 打字區（平常收著）：打出去的字＋常用特殊鍵（按住會連發）
+        typeBox = new LinearLayout(this);
+        typeBox.setOrientation(LinearLayout.VERTICAL);
+        typeBox.setVisibility(View.GONE);
+        typeCap = new Keyboards.TypeCapture(this, hub);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-1, dp(46));
+        cl.topMargin = dp(8);
+        typeBox.addView(typeCap, cl);
+        String[] lb = {"Esc", "Tab", "←", "↑", "↓", "→", "Del", "⌫", "Enter"};
+        int[] vk = {Keyboards.VK_ESC, Keyboards.VK_TAB, Keyboards.VK_LEFT, Keyboards.VK_UP, Keyboards.VK_DOWN, Keyboards.VK_RIGHT, Keyboards.VK_DEL, Keyboards.VK_BACK, Keyboards.VK_ENTER};
+        LinearLayout keys = row();
+        for (int i = 0; i < lb.length; i++) {
+            Button kb = keyBtn(lb[i], vk[i]);
+            theme(kb);
+            kb.setBackground(themedBg(0xFF2F2842, 0xFF6A5A9E));
+            LinearLayout.LayoutParams kp = new LinearLayout.LayoutParams(0, -1, i == lb.length - 1 ? 1.5f : 1f);
+            if (i < lb.length - 1) kp.rightMargin = dp(3);
+            keys.addView(kb, kp);
+        }
+        LinearLayout.LayoutParams kl = new LinearLayout.LayoutParams(-1, dp(44));
+        kl.topMargin = dp(6);
+        typeBox.addView(keys, kl);
+        root.addView(typeBox);
+
+        // 觸控板＋右上角「全螢幕」（它是觸控板的放大，不是另一個模式，所以放在觸控板上）
+        android.widget.FrameLayout padBox = new android.widget.FrameLayout(this);
         Touchpad pad = new Touchpad(this);
+        pad.onThreeTap = this::toggleTyping;
+        padBox.addView(pad, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        TextView fullBtn = new TextView(this);
+        fullBtn.setText("全螢幕");
+        fullBtn.setTextSize(13);
+        fullBtn.setTextColor(0xFFCFC3E6);
+        fullBtn.setGravity(Gravity.CENTER);
+        fullBtn.setPadding(dp(12), 0, dp(12), 0);
+        fullBtn.setBackground(roundBg(0xFF3A3150, dp(14)));
+        fullBtn.setOnClickListener(v -> setPadFull(true));
+        android.widget.FrameLayout.LayoutParams fl = new android.widget.FrameLayout.LayoutParams(-2, dp(32), Gravity.TOP | Gravity.END);
+        fl.topMargin = dp(10); fl.rightMargin = dp(10);
+        padBox.addView(fullBtn, fl);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 0, 1f);
         lp.topMargin = dp(10); lp.bottomMargin = dp(10);
-        root.addView(pad, lp);
+        root.addView(padBox, lp);
 
         LinearLayout btnRow = row();
-        btnRow.addView(holdBtn("左鍵", MouseHub.BTN_LEFT), weight());
-        btnRow.addView(holdBtn("中鍵", MouseHub.BTN_MIDDLE), weightSmall());
-        btnRow.addView(holdBtn("右鍵", MouseHub.BTN_RIGHT), weight());
+        Button bl = holdBtn("左鍵", MouseHub.BTN_LEFT), bm = holdBtn("中鍵", MouseHub.BTN_MIDDLE), br = holdBtn("右鍵", MouseHub.BTN_RIGHT);
+        typeBtn = btn("⌨", v -> toggleTyping());
+        typeBtn.setTextSize(22);
+        for (Button b : new Button[]{bl, bm, br, typeBtn}) theme(b);
+        LinearLayout.LayoutParams w1 = weight(), w2 = weightSmall(), w3 = weight(), w4 = weightSmall();
+        w1.rightMargin = w2.rightMargin = w3.rightMargin = dp(6);
+        btnRow.addView(bl, w1); btnRow.addView(bm, w2); btnRow.addView(br, w3); btnRow.addView(typeBtn, w4);
         root.addView(btnRow, new LinearLayout.LayoutParams(-1, dp(72)));
-
-        final TextView sl = new TextView(this);
-        sl.setTextColor(0xFF9A8FB0);
-        sl.setPadding(0, dp(8), 0, 0);
-        root.addView(sl);
-        // 速度：前段 0.1～1.5 每格 0.1（日常細調），後段 1.5～5.0 每格 0.25（高速，例如玩 osu! 要小幅手指掃過整個螢幕）
-        SeekBar sb = new SeekBar(this);
-        sb.setMax(SPEED_STEPS);
-        sb.setProgress(speedToStep(hub.sensitivity()));
-        sl.setText(speedLabel(hub.sensitivity()));
-        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar s, int v, boolean f) { float g = stepToSpeed(v); hub.setSensitivity(g); sl.setText(speedLabel(g)); }
-            @Override public void onStartTrackingTouch(SeekBar s) {}
-            @Override public void onStopTrackingTouch(SeekBar s) {}
-        });
-        root.addView(sb);
+        speedBox = null;
 
         setContentView(root);
+    }
+
+    /** 連線列：● 綠點＝連上、灰＝找不到；點名稱換電腦。右邊 ⚙（觸控板速度也在裡面）。 */
+    private void connRow(LinearLayout root) {
+        status = new TextView(this);   // 不顯示（連線列已經講了），留著讓 refresh 照舊運作
+        status.setVisibility(View.GONE);
+        root.addView(status);
+        LinearLayout conn = row();
+        conn.setGravity(Gravity.CENTER_VERTICAL);
+        actA = flatBtn("", v -> pcDialog());
+        actA.setTextSize(16);
+        actA.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        actA.setSingleLine(true);
+        actA.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        actB = flatBtn("⚙", v -> settingsDialog());
+        actB.setTextSize(22);
+        conn.addView(actA, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        conn.addView(actB, new LinearLayout.LayoutParams(dp(56), dp(48)));
+        root.addView(conn);
+        compactPc = true;
+    }
+
+    // ---------- 共用小元件 ----------
+    private Button typeBtn;
+    /** 一排按鈕，中間留 6dp 縫。 */
+    private void addGapped(LinearLayout r, View[] vs, float[] w) {
+        for (int i = 0; i < vs.length; i++) {
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(0, -1, w[i]);
+            if (i < vs.length - 1) l.rightMargin = dp(6);
+            r.addView(vs[i], l);
+        }
+    }
+    private boolean compactPc;   // 觸控板的連線列寫法（● 名稱 ▾）
+    private android.graphics.drawable.GradientDrawable roundBg(int color, int r) {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(color); g.setCornerRadius(r);
+        return g;
+    }
+    /** 跟畫面同色系的按鈕底（按下去亮一點）。 */
+    private android.graphics.drawable.StateListDrawable themedBg(int normal, int pressed) {
+        android.graphics.drawable.StateListDrawable d = new android.graphics.drawable.StateListDrawable();
+        d.addState(new int[]{android.R.attr.state_pressed}, roundBg(pressed, dp(14)));
+        d.addState(new int[]{android.R.attr.state_selected}, roundBg(0xFF5B4B8A, dp(14)));
+        d.addState(new int[]{}, roundBg(normal, dp(14)));
+        return d;
+    }
+    private void theme(Button b) {
+        b.setBackground(themedBg(0xFF3A3150, 0xFF6A5A9E));
+        b.setTextColor(0xFFE8DDF5);
+        b.setStateListAnimator(null);
+    }
+    private Button flatBtn(String t, View.OnClickListener l) {
+        Button b = btn(t, l);
+        b.setBackgroundColor(0x00000000);
+        b.setTextColor(0xFFE8DDF5);
+        b.setStateListAnimator(null);
+        return b;
+    }
+    /** 三個模式的分段切換（0 觸控板、1 繪圖板、2 鍵盤）：目前的亮起來。 */
+    private LinearLayout modeBar(int cur) {
+        LinearLayout bar = row();
+        bar.setBackground(roundBg(0xFF221C2E, dp(12)));
+        bar.setPadding(dp(3), dp(3), dp(3), dp(3));
+        String[] names = {"觸控板", "繪圖板", "鍵盤"};
+        for (int i = 0; i < 3; i++) {
+            final int k = i;
+            TextView t = new TextView(this);
+            t.setText(names[i]);
+            t.setTextSize(15);
+            t.setGravity(Gravity.CENTER);
+            t.setTextColor(i == cur ? 0xFFFFFFFF : 0xFF9A8FB0);
+            if (i == cur) t.setBackground(roundBg(0xFF5B4B8A, dp(10)));
+            t.setOnClickListener(v -> {
+                if (k == cur) return;
+                if (k == 0) { if (!kbMode().isEmpty()) setKbMode(""); else setTabletMode(false); }
+                else if (k == 1) { if (!kbMode().isEmpty()) getSharedPreferences("mouse", MODE_PRIVATE).edit().putString("kbMode", "").apply(); setTabletMode(true); }
+                else { adjustingArea = false; getSharedPreferences("mouse", MODE_PRIVATE).edit().putBoolean("tabletMode", false).apply(); setKbMode("pc"); }   // 鍵盤的「← 觸控板」要真的回觸控板
+            });
+            bar.addView(t, new LinearLayout.LayoutParams(0, -1, 1f));
+        }
+        return bar;
     }
 
     static final int SPEED_STEPS = 28;
@@ -589,7 +711,12 @@ public class MainActivity extends Activity {
         status.setText(text);
         if (tabletMode()) { showTabletPress(); if (pad != null) pad.invalidate(); }   // 找到電腦後螢幕清單／比例可能變了
         PcList.Pc sel = hub.pcs().selected();
-        actA.setText("選電腦：" + (sel == null ? "（還沒選）" : sel.label()) + "  ▾");
+        if (compactPc) {
+            String name = sel == null ? "選一台電腦" : sel.label();
+            android.text.SpannableString sp = new android.text.SpannableString("●  " + name + "  ▾");
+            sp.setSpan(new android.text.style.ForegroundColorSpan(sel != null && sel.online ? 0xFF5FD38A : 0xFF6B6280), 0, 1, 0);
+            actA.setText(sp);
+        } else actA.setText("選電腦：" + (sel == null ? "（還沒選）" : sel.label()) + "  ▾");
     }
 
 
@@ -607,6 +734,23 @@ public class MainActivity extends Activity {
         nameEt.setText(st.phoneName(this));
         box.addView(nl);
         box.addView(nameEt);
+        // 觸控板速度：前段 0.1～1.5 每格 0.1（日常細調），後段 1.5～5.0 每格 0.25（高速，例如玩 osu! 要小幅手指掃過整個螢幕）
+        final TextView sl = new TextView(this);
+        sl.setTextSize(16);
+        sl.setPadding(0, dp(12), 0, 0);
+        SeekBar sb = new SeekBar(this);
+        sb.setMax(SPEED_STEPS);
+        sb.setProgress(speedToStep(hub.sensitivity()));
+        sl.setText("觸控板" + speedLabel(hub.sensitivity()));
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int v, boolean f) { float g = stepToSpeed(v); hub.setSensitivity(g); sl.setText("觸控板" + speedLabel(g)); }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        });
+        box.addView(sl);
+        LinearLayout.LayoutParams sbl = new LinearLayout.LayoutParams(-1, -2);
+        sbl.bottomMargin = dp(14);
+        box.addView(sb, sbl);
         for (MouseSettings.Toggle t : MouseSettings.ALL) {
             android.widget.Switch sw = new android.widget.Switch(this);
             sw.setText(t.title);
@@ -826,6 +970,7 @@ public class MainActivity extends Activity {
         b.setText(t);
         b.setAllCaps(false);
         b.setOnClickListener(l);
+        theme(b);
         return b;
     }
 
@@ -833,6 +978,7 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(t);
         b.setAllCaps(false);
+        theme(b);
         b.setTextSize(17);
         b.setOnTouchListener((v, e) -> {
             int a = e.getActionMasked();
@@ -860,6 +1006,8 @@ public class MainActivity extends Activity {
     class Touchpad extends View {
         private static final long TAP_WINDOW = 250;
         private final Paint bg = new Paint(Paint.ANTI_ALIAS_FLAG), txt = new Paint(Paint.ANTI_ALIAS_FLAG);
+        boolean full;           // 全螢幕（簡報）版
+        Runnable onThreeTap;    // 三指點一下（叫出／收起打字）
         private float lastX, lastY, startX, startY, remX, remY, scrollAcc, lastAvgY;
         private long downAt;
         private int maxPtr, holdX, holdY;
@@ -886,12 +1034,30 @@ public class MainActivity extends Activity {
             txt.setTextAlign(Paint.Align.CENTER);
         }
 
+        @Override protected void onAttachedToWindow() { super.onAttachedToWindow(); shownAt = android.os.SystemClock.uptimeMillis(); }
         @Override protected void onDraw(Canvas c) {
+            if (full) { drawFull(c); return; }
             c.drawRoundRect(new RectF(0, 0, getWidth(), getHeight()), dp(18), dp(18), bg);
             float cx = getWidth() / 2f, cy = getHeight() / 2f;
             c.drawText("單指滑＝移動　點一下＝左鍵", cx, cy - dp(22), txt);
             c.drawText("雙指點＝右鍵　雙指上下滑＝捲動", cx, cy, txt);
             c.drawText("點一下再按住滑／按住不動一下再滑＝拖曳", cx, cy + dp(22), txt);
+            if (onThreeTap != null) c.drawText("三指點一下＝打字", cx, cy + dp(44), txt);
+        }
+        // 全螢幕（簡報）：說明只出現 3 秒、再淡掉，之後畫面乾淨
+        private long shownAt;
+        private void drawFull(Canvas c) {
+            c.drawRoundRect(new RectF(0, 0, getWidth(), getHeight()), dp(18), dp(18), bg);
+            long t = android.os.SystemClock.uptimeMillis() - shownAt;
+            if (t > 3600) return;
+            int a = t < 3000 ? 255 : (int) (255 * (3600 - t) / 600f);
+            int old = txt.getAlpha();
+            txt.setAlpha(a);
+            float cx = getWidth() / 2f, cy = getHeight() / 2f;
+            c.drawText("音量下＝下一頁　音量上＝上一頁", cx, cy - dp(11), txt);
+            c.drawText("返回鍵＝離開全螢幕", cx, cy + dp(11), txt);
+            txt.setAlpha(old);
+            postInvalidateDelayed(t < 3000 ? 3000 - t : 30);
         }
 
         /** 單點後的第二下不是點後拖（多了一指）：前一下照常當左鍵送出。 */
@@ -972,7 +1138,8 @@ public class MainActivity extends Activity {
                         hub.click(MouseHub.BTN_LEFT);
                         if (up && !moved && dur < 280) hub.click(MouseHub.BTN_LEFT);
                     } else if (!moved && dur < 280 && up) {
-                        if (maxPtr >= 2) hub.click(MouseHub.BTN_RIGHT);
+                        if (maxPtr >= 3) { if (onThreeTap != null) { performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP); onThreeTap.run(); } }
+                        else if (maxPtr >= 2) hub.click(MouseHub.BTN_RIGHT);
                         else { tapPending = true; postDelayed(flushTap, TAP_WINDOW); }
                     }
                     if (holdX != 0 || holdY != 0) { hub.move(holdX, holdY); holdX = holdY = 0; }

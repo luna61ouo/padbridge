@@ -21,9 +21,10 @@ Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 控制�
 - 一支手機可以控多台電腦（App 裡切換），多支手機也可以控同一台電腦（各自配對）
 - 跟眼鏡、耳機、手錶等藍牙裝置並存，不搶藍牙
 - 觸控板：單指移動、點一下左鍵、雙指點右鍵、雙指上下捲動；拖曳＝點一下後馬上再按住滑（點後拖），或按住不動一下再滑
-- **鍵盤**（跟觸控板、繪圖板並列的第三個模組，兩種模式，內容全部加密）：
-  - 手機打字：用手機自己的輸入法（注音、拼音都行），選定的字才送出，電腦不用切輸入法；附常用鍵一排與小觸控板
-  - 電腦鍵盤：橫放的完整美式鍵盤（含 F1～F12、方向鍵），送的是實體按鍵，快捷鍵、遊戲都能用。組合鍵可以多指按，也可以不用多指：Ctrl／Shift／Alt／Win 點一下＝鎖一次、再點＝一直鎖住；「🔒 鎖」再點任何鍵＝那顆一直按著
+  - 打字直接在觸控板裡：按 ⌨ 或三指點一下，叫出手機自己的輸入法（注音、拼音都行），選定的字才送出，電腦不用切輸入法；附常用鍵一排，觸控板照樣能用
+  - **全螢幕（簡報用）**：整個畫面只剩觸控板，音量下＝下一頁、音量上＝上一頁（跟簡報筆一樣送 PgDn／PgUp），返回鍵離開
+- 上方一行看連線狀態與切換電腦，三個模式（觸控板｜繪圖板｜鍵盤）一鍵切換
+- **電腦鍵盤**（跟觸控板、繪圖板並列的第三個模組，內容全部加密）：橫放的完整美式鍵盤（含 F1～F12、方向鍵），送的是實體按鍵，快捷鍵、遊戲都能用。組合鍵可以多指按，也可以不用多指：Ctrl／Shift／Alt／Win 點一下＝鎖一次、再點＝一直鎖住；「🔒 鎖」再點任何鍵＝那顆一直按著
   - 按著的鍵每 0.3 秒重送一次，電腦 1 秒沒收到就全部放開，網路斷了也不會卡住 Ctrl
 - **自動更新**：手機、電腦、GitHub 三邊比版本，誰舊誰提示，按了才更新；電腦端可以直接由手機更新（不用上網），只裝發布金鑰簽過名、而且比較新的版本
 - **繪圖板模式**（絕對座標，配一支觸控筆就是繪圖板）：
@@ -105,9 +106,10 @@ The mouse is just the first piece. Padbridge aims to be an **input relay**: the 
 - One phone can drive several PCs (switch in the app), and several phones can share one PC (each paired separately)
 - Coexists with Bluetooth glasses, headsets and watches — it doesn't use Bluetooth at all
 - Touchpad: one-finger move, tap = left click, two-finger tap = right click, two-finger scroll; drag = tap then immediately touch and slide (tap-and-drag), or press and hold, then move
-- **Keyboard** (a third module next to touchpad and tablet, two modes, all content encrypted):
-  - Phone typing: use the phone's own IME (Zhuyin, Pinyin, anything); only committed text is sent, so the PC doesn't need to switch input methods. Includes a row of common keys and a small touchpad
-  - PC keyboard: a full landscape US layout (F1–F12, arrows) that sends real key presses, so shortcuts and games work. Combos with several fingers, or without multitouch: tap Ctrl/Shift/Alt/Win once = latch for one key, tap again = lock; "🔒 鎖" (lock) then any key = hold that key down
+  - Typing lives inside the touchpad: tap ⌨ or tap with three fingers to bring up the phone's own IME (Zhuyin, Pinyin, anything); only committed text is sent, so the PC doesn't need to switch input methods. A row of common keys comes with it, and the touchpad keeps working
+  - **Full screen (for presentations)**: nothing but the touchpad; volume down = next slide, volume up = previous slide (PgDn/PgUp, like a presenter clicker); Back exits
+- One line at the top shows the connection and switches PCs; the three modes (touchpad | tablet | keyboard) are one tap apart
+- **PC keyboard** (a third module next to touchpad and tablet, all content encrypted): a full landscape US layout (F1–F12, arrows) that sends real key presses, so shortcuts and games work. Combos with several fingers, or without multitouch: tap Ctrl/Shift/Alt/Win once = latch for one key, tap again = lock; "🔒 鎖" (lock) then any key = hold that key down
   - Held keys are re-sent every 0.3 s and the PC releases everything after 1 s of silence, so a dropped connection can't leave Ctrl stuck
 - **Auto-update**: phone, PC and GitHub compare versions; whichever is older shows a prompt, and nothing installs until you tap it. The phone can update the PC directly (no internet needed); the PC only installs packages signed with the release key and newer than what it has
 - **Drawing-tablet mode** (absolute positioning — add a stylus and it's a pen tablet):
