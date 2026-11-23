@@ -15,6 +15,10 @@ Padbridge 讓 Android 手機變成電腦的觸控板，透過 **Wi-Fi** 控制�
 
 滑鼠只是第一步。Padbridge 的目標是當「輸入中繼站」：手機接住藍牙搖桿、鍵盤、滑鼠、手錶手勢，再透過 Wi-Fi 轉給沒有藍牙、或不方便配對的電腦。
 
+[![Padbridge 介紹影片（45 秒，點開播放）](docs/intro-zh.jpg)](docs/intro-zh.mp4)
+
+▶ 45 秒介紹影片，點圖片播放
+
 ### 現在能做什麼
 
 - 電腦只要裝一個 Windows 小程式（右下角圖示）；手機不需要任何特殊權限
@@ -99,6 +103,10 @@ Need a mouse but didn't bring one? Want to control your PC from the couch? Sever
 Padbridge turns an Android phone into a touchpad for your computer, over **Wi-Fi**.
 
 The mouse is just the first piece. Padbridge aims to be an **input relay**: the phone receives Bluetooth gamepads, keyboards, mice and watch gestures, and forwards them over Wi-Fi to computers that have no Bluetooth or are inconvenient to pair.
+
+[![Padbridge intro video (45 s, click to play)](docs/intro-en.jpg)](docs/intro-en.mp4)
+
+▶ 45-second intro video. Click the image to play.
 
 ### What works today
 
