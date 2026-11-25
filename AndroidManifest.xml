@@ -1,16 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="io.github.luna61ouo.padbridge"
-    android:versionCode="6"
-    android:versionName="0.14.0">
-
-    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="35" />
+    android:versionCode="7"
+    android:versionName="0.15.0">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 手錶滑鼠：藍牙直連收手錶的動作；前景服務在手錶連著時保持運作 -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 滑鼠 API 核准畫面：隱藏別的 App 疊在上面的畫面（防騙按） -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+    <!-- 被控端自我檢查：開機後看「Padbridge 被控端」有沒有被系統關掉，關了就通知（沒設定成被控端的裝置什麼都不做） -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="Padbridge"
@@ -53,6 +60,33 @@
             </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/remote_service" />
         </service>
+
+        <!-- 手錶滑鼠：手錶送 HELLO 叫醒（Google 手錶通訊，只收同一把金鑰簽的 App） -->
+        <service android:name=".WatchListener" android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/padbridge/watch" />
+            </intent-filter>
+        </service>
+        <service android:name=".WatchLinkService" android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- 滑鼠 API（11-25）：其他 App 綁這個服務送動作。呼叫者身分看系統給的 uid，要使用者在 ApiApproveActivity 核准過才放行。 -->
+        <service android:name=".ApiService" android:exported="true">
+            <intent-filter>
+                <action android:name="io.github.luna61ouo.padbridge.API" />
+            </intent-filter>
+        </service>
+        <activity android:name=".ApiApproveActivity" android:exported="false" android:excludeFromRecents="true"
+            android:launchMode="singleTop" />
+        <receiver android:name=".ApiRevokeReceiver" android:exported="false" />
+        <activity android:name=".RemoteSetupActivity" android:exported="false" android:label="被控端設定" />
+        <receiver android:name=".RemoteWatch" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- 測試／之後手錶轉送用。只有擁有 DUMP 權限的呼叫者（adb shell）能送，一般 App 送不進來。 -->
         <receiver

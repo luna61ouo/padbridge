@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 public final class MouseSettings {
     public static final String WIFI_LOW_LATENCY = "wifiLowLatency";
     public static final String UPDATE_CHECK = "updateCheck";
+    public static final String WATCH = "watch";
     public static final String TABLET_PRESS = "tabletPress";   // 繪圖板：true＝自動左鍵、false＝按鍵觸發（畫面上切，不放設定頁）
 
     public static final class Toggle {
@@ -22,6 +23,8 @@ public final class MouseSettings {
                 "用觸控板時讓手機的 Wi-Fi 不進省電，游標比較不會一頓一頓。停手 5 秒恢復省電。", true),
         new Toggle(UPDATE_CHECK, "每天檢查 App 新版",
                 "每天看一次 GitHub 有沒有新版 App，有的話在觸控板上方提示。關掉也照樣會跟電腦比對版本。", true),
+        new Toggle(WATCH, "手錶滑鼠（Wear OS）",
+                "讓配對的手錶當觸控板：手錶上打開 Padbridge 就會叫醒這支手機，用藍牙傳到這裡，再照原本的方式送給選中的電腦。打開時會要求「附近的裝置」權限。", false),
     };
 
     private final SharedPreferences p;
@@ -43,6 +46,10 @@ public final class MouseSettings {
         return n.replace("|", " ").trim();
     }
     public void setPhoneName(String n) { p.edit().putString("phoneName", n == null ? "" : n.replace("|", " ").trim()).apply(); }
+
+    /** 手錶觸控板的倍率（手錶像素 → 電腦像素）。手錶螢幕小，預設比手機快。 */
+    public float watchSensitivity() { return p.getFloat("watchSens", 2.5f); }
+    public void setWatchSensitivity(float s) { p.edit().putFloat("watchSens", s).apply(); }
 
     public float sensitivity() { return p.getFloat("sens2", 0.45f); }
     public void setSensitivity(float s) { p.edit().putFloat("sens2", s).apply(); }

@@ -1,3 +1,8 @@
 build/
 dist/
 build.local.env
+.gradle/
+local.properties
+app/build/
+wear/build/
+shared/build/

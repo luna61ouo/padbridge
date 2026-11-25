@@ -160,7 +160,10 @@ function Apply-Update([string]$src, [string]$ver) {
         return
     }
     # 只換程式檔：開一個小幫手等我結束後把新版叫起來
-    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $dir 'PadbridgeRestart.ps1')`" -WaitPid $PID -Dir `"$dir`""
+    $rs = "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $dir 'PadbridgeRestart.ps1')`" -WaitPid $PID -Dir `"$dir`""
+    # conhost --headless：Windows 11 的 Windows Terminal 不會把它開成黑視窗（見 install.ps1）
+    if ([Environment]::OSVersion.Version.Build -ge 17763) { Start-Process (Join-Path $env:WINDIR 'System32\conhost.exe') -ArgumentList "--headless powershell.exe $rs" }
+    else { Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-WindowStyle Hidden $rs" }
     $script:running = $false
 }
 "$(Get-Date -Format s) start port=$port" | Out-File -Append -Encoding utf8 $log

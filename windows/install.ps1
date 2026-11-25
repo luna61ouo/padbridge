@@ -50,7 +50,15 @@ New-NetFirewallRule -DisplayName $rule -Direction Inbound -Protocol UDP -LocalPo
 Write-Host '✓ 防火牆：UDP 47801，只收家裡網路（區網）'
 
 $user = $User
-$a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ("-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"" + (Join-Path $dir 'PadbridgeReceiver.ps1') + "`"")
+$recv = Join-Path $dir 'PadbridgeReceiver.ps1'
+# Windows 11 預設終端機是 Windows Terminal：排程叫起來的 powershell 會被交給它開成一般視窗，-WindowStyle Hidden 藏不掉，
+# 變成一直開著的黑視窗，使用者一關就等於關掉接收程式（11-23 一台筆電實際發生）。conhost --headless 在背景代管主控台、不開任何視窗；
+# Windows 10 1809（組建 17763）起才有，更舊的照原本的做法。
+if ([Environment]::OSVersion.Version.Build -ge 17763) {
+    $a = New-ScheduledTaskAction -Execute (Join-Path $env:WINDIR 'System32\conhost.exe') -Argument ("--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$recv`"")
+} else {
+    $a = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ("-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$recv`"")
+}
 $t = New-ScheduledTaskTrigger -AtLogOn -User $user
 $p = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)

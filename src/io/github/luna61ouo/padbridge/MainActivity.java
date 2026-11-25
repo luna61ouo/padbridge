@@ -656,6 +656,14 @@ public class MainActivity extends Activity {
         super.onResume();
         hub.setListener(t -> ui.post(() -> refresh(t)));
         hub.tellPcMode();
+        // 這台是被控端（有配對碼）：Android 13 起要通知權限，被控端被關掉時才叫得出提醒；只問一次
+        if (android.os.Build.VERSION.SDK_INT >= 33 && RemoteWatch.configured(this)
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                && !getSharedPreferences("remote", MODE_PRIVATE).getBoolean("askedNoti", false)) {
+            getSharedPreferences("remote", MODE_PRIVATE).edit().putBoolean("askedNoti", true).apply();
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 42);
+        }
+        RemoteWatch.check(this);
         // 回到 App：找一次電腦（拿到它的版本）、需要的話看一下 GitHub，然後更新提示
         final boolean gh = hub.settings().on(MouseSettings.UPDATE_CHECK);
         new Thread(() -> {
@@ -720,6 +728,18 @@ public class MainActivity extends Activity {
     }
 
 
+    /** 手錶滑鼠要「附近的裝置」（藍牙直連）；通知權限讓前景服務的通知看得到（沒給也能用）。 */
+    private void askWatchPermissions() {
+        java.util.ArrayList<String> need = new java.util.ArrayList<>();
+        if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            need.add(android.Manifest.permission.BLUETOOTH_CONNECT);
+        if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_ADVERTISE) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            need.add(android.Manifest.permission.BLUETOOTH_ADVERTISE);
+        if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+            need.add(android.Manifest.permission.POST_NOTIFICATIONS);
+        if (!need.isEmpty()) requestPermissions(need.toArray(new String[0]), 41);
+    }
+
     // ---------- 設定（照 MouseSettings.ALL 自動長出來）----------
     private void settingsDialog() {
         LinearLayout box = new LinearLayout(this);
@@ -758,6 +778,7 @@ public class MainActivity extends Activity {
             sw.setChecked(st.on(t.key));
             sw.setOnCheckedChangeListener((b, on) -> {
                 st.set(t.key, on);
+                if (on && MouseSettings.WATCH.equals(t.key)) askWatchPermissions();
                 refresh(hub.statusText());
             });
             TextView help = new TextView(this);
@@ -768,6 +789,53 @@ public class MainActivity extends Activity {
             box.addView(sw);
             box.addView(help);
         }
+        // 手錶滑鼠速度：同一套刻度，預設 2.5（手錶螢幕小，要比手機快）
+        final TextView wl = new TextView(this);
+        wl.setTextSize(16);
+        SeekBar wsb = new SeekBar(this);
+        wsb.setMax(SPEED_STEPS);
+        wsb.setProgress(speedToStep(st.watchSensitivity()));
+        wl.setText("手錶" + speedLabel(st.watchSensitivity()));
+        wsb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int v, boolean f) { float g = stepToSpeed(v); st.setWatchSensitivity(g); wl.setText("手錶" + speedLabel(g)); }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        });
+        box.addView(wl);
+        LinearLayout.LayoutParams wsbl = new LinearLayout.LayoutParams(-1, -2);
+        wsbl.bottomMargin = dp(14);
+        box.addView(wsb, wsbl);
+        // 滑鼠 API：已允許的 App（11-25）
+        java.util.List<String[]> apiApps = ApiApps.get(this).list();
+        TextView al = new TextView(this);
+        al.setText("允許控制滑鼠的 App" + (apiApps.isEmpty() ? "：沒有" : ""));
+        al.setTextSize(16);
+        box.addView(al);
+        for (final String[] a : apiApps) {
+            LinearLayout r = new LinearLayout(this);
+            r.setOrientation(LinearLayout.HORIZONTAL);
+            r.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            TextView n = new TextView(this);
+            n.setText(a[1] + "\n" + a[0]);
+            n.setTextSize(13);
+            r.addView(n, new LinearLayout.LayoutParams(0, -2, 1));
+            Button rm = new Button(this);
+            rm.setText("移除");
+            rm.setOnClickListener(v -> { ApiApps x = ApiApps.get(this); x.remove(a[0]); x.forgetCaller(a[0]); box.removeView(r); });
+            r.addView(rm);
+            box.addView(r);
+        }
+        TextView ah = new TextView(this);
+        ah.setText("其他 App 只能捲動、點左右鍵；第一次要用時會跳通知問你。");
+        ah.setTextColor(0xFF9A8FB0);
+        ah.setTextSize(13);
+        ah.setPadding(0, 0, 0, dp(14));
+        box.addView(ah);
+        Button rx = new Button(this);
+        rx.setAllCaps(false);
+        rx.setText("讓這台被別支手機控制（被控端）…");
+        rx.setOnClickListener(v -> startActivity(new Intent(this, RemoteSetupActivity.class)));
+        box.addView(rx);
         Button test = new Button(this);
         test.setText("測試：游標畫一個圈");
         test.setOnClickListener(v -> onActionB());
@@ -821,7 +889,13 @@ public class MainActivity extends Activity {
                 b.setAlpha(pc.online ? 1f : 0.4f);
                 b.setEnabled(true);
                 b.setOnClickListener(v -> {
-                    if (!pc.online) { b.setText(pc.label() + "\n現在連不到：電腦沒開、或不在同一個 Wi-Fi"); return; }
+                    if (!pc.online) {
+                        // 被控端是 Android（版本以 a 開頭）：最常見的是對方的無障礙服務被關掉（有些車機開機會清掉），它自己會跳通知
+                        b.setText(pc.label() + (pc.ver.startsWith("a")
+                                ? "\n現在連不到：對方沒開機、不在同一個 Wi-Fi，或對方的「" + getString(R.string.remote_label) + "」被關掉了（到對方的 設定 → 無障礙 打開）"
+                                : "\n現在連不到：電腦沒開、或不在同一個 Wi-Fi"));
+                        return;
+                    }
                     hub.selectPc(pc.id); refresh(hub.statusText()); d.dismiss();
                 });
                 b.setOnLongClickListener(v -> { pcMenu(pc, render[0]); return true; });

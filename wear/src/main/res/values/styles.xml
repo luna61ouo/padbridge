@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 手錶預設「從左往右滑」會關掉 App；觸控板上一滑就不見太危險，關掉這個行為，離開改用返回鍵。 -->
+    <style name="PadTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowSwipeToDismiss">false</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

@@ -77,6 +77,7 @@ public class RemoteService extends AccessibilityService {
         cx = scrW / 2f; cy = scrH / 2f;
         addCursor();
         startListener();
+        RemoteWatch.clear(this);
         Log.i(TAG, "remote service on " + scrW + "x" + scrH);
     }
 

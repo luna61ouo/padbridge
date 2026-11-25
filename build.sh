@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Padbridge APK — 不用 Gradle：aapt2 + javac + d8 + apksigner。
+# Build Padbridge APK：先產 Windows 安裝包（打進 APK 的 assets），再交給 Gradle 編譯、簽章。
 # 產出：build/padbridge.apk
 #
 # 需要：Android SDK（platform android-35、build-tools 35.0.0）、JDK 11+。
@@ -26,7 +26,7 @@ if [ ! -f "$KEYSTORE" ]; then
         -storepass "$KS_PASS" -keypass "$KS_PASS" -dname "CN=Padbridge Debug" >/dev/null
 fi
 
-rm -rf build && mkdir -p build/gen build/classes build/assets/PadbridgeSetup
+rm -rf build && mkdir -p build/assets/PadbridgeSetup
 # Windows 通用安裝包（不含任何配對碼）：打進 APK 讓手機能在區網提供下載；release.sh 也直接拿這一個上傳，
 # 所以 GitHub 上的跟手機給的是同一個檔（SHA-256 一樣）。時間戳固定，重建內容不變時位元組也不變。
 cp windows/PadbridgeSetup.cmd windows/install.ps1 windows/PadbridgeReceiver.ps1 windows/PadbridgeRestart.ps1 windows/PadbridgeQr.cs windows/PadbridgeFrames.cs windows/PadbridgeKeys.cs windows/PadbridgeUpdate.cs \
@@ -41,18 +41,11 @@ if [ -n "${PADBRIDGE_UPDATE_KEY:-}" ] && [ -f "$PADBRIDGE_UPDATE_KEY" ]; then
 else
     echo "（沒有 PADBRIDGE_UPDATE_KEY：電腦端安裝包不簽名，這版不能用自動更新推給電腦）"
 fi
-"$BT/aapt2" compile --dir res -o build/res.zip
-"$BT/aapt2" link --manifest AndroidManifest.xml --min-sdk-version 29 --target-sdk-version 35 \
-    --auto-add-overlay -I "$ANDROID_JAR" -R build/res.zip -A build/assets --java build/gen -o build/app-no-dex.apk
-find src build/gen -name '*.java' | sort > build/srclist.txt
-# 第三方：libs/*.jar（ZXing core 3.5.3，Apache-2.0，掃配對 QR 用；Maven Central 下載、sha1 驗過）
-LIBS=$(ls libs/*.jar 2>/dev/null | tr '\n' ':')
-javac --release 11 -Xlint:-options -d build/classes -classpath "$ANDROID_JAR:$LIBS" @build/srclist.txt
-find build/classes -name '*.class' > build/classlist.txt
-"$BT/d8" --release --output build/ --min-api 29 --lib "$ANDROID_JAR" @build/classlist.txt libs/*.jar
-( cd build && zip -q -j app-no-dex.apk classes.dex && mv app-no-dex.apk app-unsigned.apk )
-"$BT/zipalign" -f -p 4 build/app-unsigned.apk build/app-aligned.apk
-"$BT/apksigner" sign --ks "$KEYSTORE" --ks-key-alias "$KEY_ALIAS" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \
-    --out build/padbridge.apk build/app-aligned.apk
+# 編譯、打包、簽章交給 Gradle（11-23 起；手機端要用 Google 手錶通訊函式庫，Play 上架也要 Gradle）。
+# 簽章金鑰照舊從 build.local.env 的 PADBRIDGE_KEYSTORE／PADBRIDGE_KS_PASS_FILE 來；沒有就用 debug 金鑰。
+export PADBRIDGE_KEYSTORE="$KEYSTORE" KEY_ALIAS PADBRIDGE_KS_PASS_FILE PADBRIDGE_KEY_ALIAS="$KEY_ALIAS" ANDROID_HOME
+[ -n "${PADBRIDGE_KS_PASS_FILE:-}" ] || export PADBRIDGE_KS_PASS="$KS_PASS"
+./gradlew --no-daemon -q :app:assembleRelease
+cp app/build/outputs/apk/release/app-release.apk build/padbridge.apk
 "$BT/apksigner" verify build/padbridge.apk
 echo "✓ APK: $ROOT/build/padbridge.apk ($(stat -c%s build/padbridge.apk) bytes)"

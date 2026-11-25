@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:name="android.hardware.type.watch" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:label="Padbridge"
+        android:icon="@android:drawable/ic_menu_mylocation"
+        android:theme="@style/PadTheme">
+        <uses-library android:name="com.google.android.wearable" android:required="false" />
+        <!-- 要搭配手機上的 Padbridge 才能用（設定、選電腦都在手機上） -->
+        <meta-data android:name="com.google.android.wearable.standalone" android:value="false" />
+        <activity
+            android:name="io.github.luna61ouo.padbridge.wear.WatchPadActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
